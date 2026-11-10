@@ -1,0 +1,73 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pyinstaller
+        shell: bash
+      - name: Node SPA build (if package.json has a build script)
+        shell: bash
+        run: |
+          if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)"; then
+            npm ci && npm run build
+            mkdir -p release && (cd dist && zip -r ../release/frontend-${{ matrix.os }}.zip .)
+          fi
+      - name: Linux packages (.sh and .deb)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          VER="$(cat VERSION)"
+          if [ -d dist/app ]; then SRC=dist/app; else SRC=dist; fi
+          mkdir -p release && bash scripts/make_sh.sh "$SRC" "release/app-$VER-linux.sh"
+          bash scripts/make_deb.sh "$SRC" app "$VER" release
+      - name: PyInstaller build (if packaging/app.spec exists)
+        shell: bash
+        run: |
+          if [ -f packaging/app.spec ]; then pyinstaller --noconfirm packaging/app.spec && mkdir -p release && cp -r dist/. release/; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}
+          path: release/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Checksums
+        run: bash scripts/checksums.sh release
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign
+        run: bash scripts/sign.sh release
+      - name: Publish to releases repo
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          VERSION="v$(cat VERSION).$(date -u +%Y%m%d_%H%M)"
+          gh release create "$VERSION" release/* --repo "${{ vars.RELEASES_REPO || format('{0}-releases', github.repository) }}" --title "$VERSION" --notes "Automated release from ${{ github.sha }}"
