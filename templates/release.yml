@@ -18,11 +18,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt pyinstaller
@@ -34,19 +34,19 @@ jobs:
             npm ci && npm run build
             mkdir -p release && (cd dist && zip -r ../release/frontend-${{ matrix.os }}.zip .)
           fi
+      - name: PyInstaller build (if packaging/app.spec exists)
+        shell: bash
+        run: |
+          if [ -f packaging/app.spec ]; then pyinstaller --noconfirm packaging/app.spec && mkdir -p release && cp -r dist/. release/; fi
       - name: Linux packages (.sh and .deb)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           VER="$(cat VERSION)"
-          if [ -d dist/app ]; then SRC=dist/app; else SRC=dist; fi
+          if [ -d dist/app ]; then SRC=dist/app; elif [ -d dist ]; then SRC=dist; else exit 0; fi
           mkdir -p release && bash scripts/make_sh.sh "$SRC" "release/app-$VER-linux.sh"
           bash scripts/make_deb.sh "$SRC" app "$VER" release
-      - name: PyInstaller build (if packaging/app.spec exists)
-        shell: bash
-        run: |
-          if [ -f packaging/app.spec ]; then pyinstaller --noconfirm packaging/app.spec && mkdir -p release && cp -r dist/. release/; fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: release-${{ matrix.os }}
           path: release/*
@@ -58,7 +58,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: release
           merge-multiple: true
