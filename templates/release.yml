@@ -69,4 +69,4 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         run: |
           VERSION="v$(cat VERSION).$(date -u +%Y%m%d_%H%M)"
-          gh release create "$VERSION" release/* --repo "${{ github.repository }}-releases" --title "$VERSION" --notes "Automated release from ${{ github.sha }}"
+          gh release create "$VERSION" release/* --repo "${{ vars.RELEASES_REPO || format('{0}-releases', github.repository) }}" --title "$VERSION" --notes "Automated release from ${{ github.sha }}"

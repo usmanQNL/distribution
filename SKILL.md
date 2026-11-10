@@ -72,6 +72,7 @@ Walk the user through this, one step at a time. Wait for confirmation before the
 1. **Push the generated files.** The user commits and pushes `.github/workflows/release.yml`, `packaging/` and `scripts/`.
 2. **Create the releases repository** (if Q6 chose one). It must be public. Name it `<repo>-releases`.
 3. **Create a token for publishing.** A fine-grained personal access token with Contents read and write on the releases repo only. Copy it into the codebase repo as the Actions secret `RELEASES_REPO_TOKEN`: Settings, Secrets and variables, Actions, New repository secret. The token value must never be committed to the repo or pasted into chat.
+3b. **Set the releases repo name (optional).** Settings, Secrets and variables, Actions, Variables, New repository variable: name `RELEASES_REPO`, value `<owner>/<releases-repo>`. Without it the workflow uses `<repo>-releases`.
 4. **Allow the workflow to sign.** Settings, Actions, General: set Workflow permissions to read, and enable `id-token: write` in the workflow (already in the template). Cosign keyless signing needs no key to store.
 5. **Turn on branch protection for main.** Require the release workflow to pass before merge, so a broken build cannot merge.
 6. **Trigger the first run.** Merge a small change to main, or use the Actions tab, Run workflow. Open the run and check each job is green.
