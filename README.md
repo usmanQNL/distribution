@@ -1,13 +1,13 @@
 # distribution skill
 
-A shareable Claude skill that sets up release builds for a Python, Node or mixed codebase. Every merge to main builds artifacts, writes SHA256 checksums, signs them with cosign (Sigstore), and publishes a GitHub release to a separate public releases repository.
+A shareable Claude skill that sets up release builds for a Python, Node or mixed codebase. Every merge to main builds artifacts, writes SHA256 checksums, signs them with cosign (Sigstore) or Ed25519, chosen in setup, and publishes a GitHub release to a separate public releases repository.
 
 ## What it produces
 
 - Windows `.exe` (PyInstaller)
 - Linux `.sh` self-extracting installer and `.deb` package (built on Ubuntu runners)
 - A zipped SPA (`frontend-<os>.zip`) when the Node project has a `build` script
-- `SHA256SUMS` plus a cosign signature and certificate for each file
+- `SHA256SUMS` plus a signature for each file (cosign with certificate, or Ed25519)
 
 Python projects can also deploy with uv instead of PyInstaller (`templates/uv-deploy.sh`).
 

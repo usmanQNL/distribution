@@ -86,9 +86,22 @@ jobs:
           merge-multiple: true
       - name: Checksums
         run: bash scripts/checksums.sh release
+      - name: Read signing mode
+        id: signing
+        shell: bash
+        run: |
+          mode=$(python3 -c "import json;print(json.load(open('distribution.json')).get('signing','cosign'))")
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
       - uses: sigstore/cosign-installer@v3
+        if: steps.signing.outputs.mode == 'cosign'
       - name: Sign
-        run: bash scripts/sign.sh release
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        shell: bash
+        run: |
+          pub=""
+          if [ -f packaging/keys/release-signing-public.pem ]; then pub=packaging/keys/release-signing-public.pem; fi
+          bash scripts/sign.sh release "${{ steps.signing.outputs.mode }}" $pub
       - name: Publish to releases repo
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}

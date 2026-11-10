@@ -1,6 +1,6 @@
 ---
 name: distribution
-description: Use when the user wants release builds (Windows .exe, Linux .sh/.deb, or a frontend bundle) with SHA256 checksums and cosign signatures, published on every merge via GitHub Actions. Asks setup questions first.
+description: Use when the user wants release builds (Windows .exe, Linux .sh/.deb, or a frontend bundle) with SHA256 checksums and signatures (cosign or Ed25519), published on every merge via GitHub Actions. Asks setup questions first.
 ---
 
 # Distribution skill
@@ -38,10 +38,9 @@ Ask about each artifact separately. Only the ones the user says yes to are built
 Default: only the Windows .exe is on. Each option is a separate choice, and the workflow builds only the ones marked `true`.
 
 **Q5. Checksums and signing**
-- SHA256SUMS only. Pro: simplest. Con: no proof of who built it.
-- Sigstore cosign keyless signing (required by this skill; recommended default). Pro: signature bound to the GitHub workflow identity, no key to lose. Con: needs `id-token: write` in Actions.
-
-Note: this skill always signs with cosign, as decided for QuellDAP. Do not offer to skip it.
+SHA256SUMS is always written. Signing is required, and the user picks one of these two. Record the choice as `signing` in `distribution.json`.
+- **cosign** (default, `"signing": "cosign"`): Sigstore keyless signing. Pro: no key to store or lose, and the signature is tied to the GitHub workflow identity. Con: needs `id-token: write` and verification needs the cosign tool.
+- **ed25519** (`"signing": "ed25519"`): a signature per file made with your own Ed25519 key. Pro: works offline, no Sigstore dependency, and verification needs only OpenSSL. Con: you must keep the private key safe. It lives in the `RELEASE_SIGNING_KEY` secret, and if it leaks you must rotate it.
 
 **Q6. Release trigger and publishing**
 - Every merge to main creates a release (recommended, matches QuellDAP). Version: `v<major>.yyyymmdd_hhmm` (UTC), with the major number read from a VERSION file.
@@ -77,10 +76,21 @@ Walk the user through this, one step at a time. Wait for confirmation before the
 2. **Create the releases repository** (if Q6 chose one). It must be public. Name it `<repo>-releases`.
 3. **Create a token for publishing.** A fine-grained personal access token with Contents read and write on the releases repo only. Copy it into the codebase repo as the Actions secret `RELEASES_REPO_TOKEN`: Settings, Secrets and variables, Actions, New repository secret. The token value must never be committed to the repo or pasted into chat.
 3b. **Set the releases repo name (optional).** Settings, Secrets and variables, Actions, Variables, New repository variable: name `RELEASES_REPO`, value `<owner>/<releases-repo>`. Without it the workflow uses `<repo>-releases`.
-4. **Allow the workflow to sign.** Settings, Actions, General: set Workflow permissions to read, and enable `id-token: write` in the workflow (already in the template). Cosign keyless signing needs no key to store.
+4. **Allow the workflow to sign.** Settings, Actions, General: set Workflow permissions to read. The template already grants `id-token: write`, which cosign needs.
+   - **If cosign:** no key to store.
+   - **If ed25519:** generate a key pair on your own machine, then put only the public half in the repo:
+     ```
+     openssl genpkey -algorithm ed25519 -out release-signing-private.pem
+     mkdir -p packaging/keys
+     openssl pkey -in release-signing-private.pem -pubout -out packaging/keys/release-signing-public.pem
+     ```
+     Commit `packaging/keys/release-signing-public.pem`. Add the private file to the repo secrets as `RELEASE_SIGNING_KEY` (paste the whole PEM contents), then delete the local private file or keep it somewhere safe. Never commit it.
 5. **Turn on branch protection for main.** Require the release workflow to pass before merge, so a broken build cannot merge.
 6. **Trigger the first run.** Merge a small change to main, or use the Actions tab, Run workflow. Open the run and check each job is green.
-7. **Verify the release.** Download the artifacts and `SHA256SUMS`, run `sha256sum -c SHA256SUMS`, then `cosign verify-blob` with the workflow identity printed in the run log.
+7. **Verify the release.** Download the artifacts, `SHA256SUMS`, and the signature files. Then:
+   - Checksums: `sha256sum -c SHA256SUMS`
+   - If cosign: `cosign verify-blob --certificate <file>.pem --signature <file>.sig --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
+   - If ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
 
 For each step, the skill says what to click and what a green result looks like. If a step fails, the skill reads the log and suggests the fix. It does not guess at the secret name or token scope.
 

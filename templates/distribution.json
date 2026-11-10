@@ -8,5 +8,6 @@
     "linux_deb": false,
     "node_spa_zip": false,
     "uv_deploy": false
-  }
+  },
+  "signing": "cosign"
 }
