@@ -20,6 +20,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+      - name: Read selected targets
+        id: targets
+        shell: bash
+        run: |
+          python3 -c "import json;t=json.load(open('distribution.json'))['targets'];[print(f'{k}={str(v).lower()}') for k,v in t.items()]" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
@@ -28,27 +33,40 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt pyinstaller
         shell: bash
-      - name: Node SPA build (if package.json has a build script)
+      - name: Node SPA build (if selected and package.json has a build script)
+        if: steps.targets.outputs.node_spa_zip == 'true'
         shell: bash
         run: |
           if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)"; then
             npm ci && npm run build
             mkdir -p release && (cd dist && zip -r ../release/frontend-${{ matrix.os }}.zip .)
           fi
-      - name: PyInstaller build (if packaging/app.spec exists)
+      - name: PyInstaller build (if selected and packaging/app.spec exists)
+        if: steps.targets.outputs.windows_exe == 'true' || steps.targets.outputs.linux_sh == 'true' || steps.targets.outputs.linux_deb == 'true'
         shell: bash
         run: |
-          if [ -f packaging/app.spec ]; then pyinstaller --noconfirm packaging/app.spec && mkdir -p release && cp -r dist/. release/; fi
-      - name: Linux packages (.sh and .deb)
-        if: runner.os == 'Linux'
+          if [ -f packaging/app.spec ]; then pyinstaller --noconfirm packaging/app.spec
+            mkdir -p release
+            if [ "$RUNNER_OS" = "Windows" ] && [ "${{ steps.targets.outputs.windows_exe }}" = "true" ]; then cp dist/app.exe release/; fi
+            if [ "$RUNNER_OS" = "Linux" ] && { [ "${{ steps.targets.outputs.linux_sh }}" = "true" ] || [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; }; then cp dist/app release/; fi
+          fi
+      - name: Linux packages (.sh and .deb, if selected)
+        if: runner.os == 'Linux' && (steps.targets.outputs.linux_sh == 'true' || steps.targets.outputs.linux_deb == 'true')
         shell: bash
         run: |
           VER="$(cat VERSION)"
           if [ -d dist/app ]; then SRC=dist/app; elif [ -d dist ]; then SRC=dist; else exit 0; fi
           mkdir -p release && bash scripts/make_sh.sh "$SRC" "release/app-$VER-linux.sh"
-          bash scripts/make_deb.sh "$SRC" app "$VER" release
+          if [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then bash scripts/make_deb.sh "$SRC" app "$VER" release; fi
           # The .sh and .deb already contain the Linux binary, so drop the raw copy from the release
-          rm -f release/app
+          if [ "${{ steps.targets.outputs.linux_sh }}" = "true" ] || [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then rm -f release/app; fi
+      - name: Inno Setup installer (Windows, if selected)
+        if: runner.os == 'Windows' && steps.targets.outputs.windows_inno_installer == 'true'
+        shell: bash
+        run: |
+          choco install innosetup -y --no-progress
+          mkdir -p release
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" packaging/installer.iss
       - uses: actions/upload-artifact@v5
         with:
           name: release-${{ matrix.os }}

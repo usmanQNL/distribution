@@ -26,13 +26,16 @@ Ask these one at a time. For each question, give the options with a short pro an
 - Flask or FastAPI, ship the frontend beside the executable: smaller build. Con: two folders to keep in sync.
 - Deploy with uv on the target instead of PyInstaller: Pro: no binaries to build. Con: the target needs Python and uv.
 
-**Q4. Targets**
-- Windows .exe as a plain zip (simplest)
-- Windows installer with Inno Setup (what QuellDAP uses; adds a Start menu entry and uninstaller)
-- Linux .sh self-extracting archive (portable, runs on any distro)
-- Linux .deb (built with dpkg-deb on the Ubuntu runner, via `scripts/make_deb.sh`)
-- Docker image on GHCR (optional, adds a container; not generated yet)
-- uv deploy, no binary: copy `templates/uv-deploy.sh`. Pro: no build step. Con: the target needs uv.
+**Q4. Artifacts, asked one at a time**
+Ask about each artifact separately. Only the ones the user says yes to are built. Record each answer as `true` or `false` under `targets` in `distribution.json`.
+- **Windows .exe** (`windows_exe`): a single PyInstaller executable. Pro: no install step, runs straight away. Con: no uninstaller or Start menu entry.
+- **Windows installer** (`windows_inno_installer`): an Inno Setup setup file built from `packaging/installer.iss`. Pro: Start menu entry, uninstaller and a standard install. Con: needs the .exe too, and the build runs on a Windows runner.
+- **Linux .sh** (`linux_sh`): a self-extracting installer. Pro: runs on any distro. Con: a bit larger, since it bundles the app.
+- **Linux .deb** (`linux_deb`): a Debian or Ubuntu package. Pro: installs with apt or dpkg. Con: only for Debian-based systems.
+- **Node SPA zip** (`node_spa_zip`): the `npm run build` output zipped. Pro: small and simple. Con: needs a server to serve it.
+- **uv deploy** (`uv_deploy`): no binary, the target runs the app with uv. Pro: no build step. Con: the target needs Python and uv. Copies `templates/uv-deploy.sh`.
+
+Default: only the Windows .exe is on. Each option is a separate choice, and the workflow builds only the ones marked `true`.
 
 **Q5. Checksums and signing**
 - SHA256SUMS only. Pro: simplest. Con: no proof of who built it.
@@ -57,7 +60,8 @@ After the answers are saved in `distribution.json`:
 1. Run `scripts/detect.sh <project-dir>` to confirm the language and Python framework. It prints `language=` (node, python, mix) and `python_framework=` (flask, fastapi, streamlit or none).
 2. Run `scripts/generate.sh <project-dir>` to write:
    - `.github/workflows/release.yml`, copied from `templates/release.yml`
-   - `packaging/app.spec`, copied from `templates/app.spec`, unless the project already has one
+   - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one. Set the `targets` flags from the answers.
+   - `packaging/app.spec` and `packaging/installer.iss`, unless the project already has them
 3. Copy `scripts/checksums.sh` and `scripts/sign.sh` into the project's `scripts/` folder. The release workflow calls them.
 4. Tell the user which files were written and what to commit. The user commits and pushes; this skill does not push.
 
