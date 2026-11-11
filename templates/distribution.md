@@ -46,6 +46,20 @@ On every push to `main` (and on manual run), GitHub Actions builds the selected 
 - `local`: nothing runs in Actions. On Windows the user runs `scripts\release_local.bat` (it calls the .sh through Git Bash). On Linux or macOS they run `scripts/release_local.sh`. Either one builds the selected artifacts, checksums and signs them, and publishes with `gh release create` to `releases_repo` in `distribution.json`. Needs: PyInstaller, `zip` (Node), `dpkg-deb` (.deb, Linux), Inno Setup 6 (installer, Windows), cosign or openssl, and `gh` logged in (or `GH_TOKEN` set). Build only on the matching OS: `.exe` and Inno on Windows, `.sh` and `.deb` on Linux.
 - The releases repo fields: `releases_repo` in `distribution.json`, or the `RELEASES_REPO` env var for local runs.
 
+## Git on the local machine
+Local runs refuse to start unless git is installed and `gh` is logged in. If git is missing, the agent should offer to install it, and must not run the local release until it is installed.
+
+Install: Windows: `winget install --id Git.Git -e`, or the installer from https://git-scm.com. macOS: `xcode-select --install` or `brew install git`. Debian or Ubuntu: `sudo apt install git`.
+
+Log in (one time per machine):
+1. Install the GitHub CLI: `winget install --id GitHub.cli` (Windows), `brew install gh` (macOS), or `sudo apt install gh` (Debian or Ubuntu).
+2. Log in: `gh auth login`. Choose GitHub.com, HTTPS, and "Login with a web browser". Copy the one-time code it shows, then press Enter to open the browser and paste it.
+3. Let git use the same login: `gh auth setup-git`.
+4. Set your identity for commits, if not set yet: `git config --global user.name "Your Name"` and `git config --global user.email "you@example.com"`.
+5. Check: `gh auth status` should show you logged in to github.com, and `git --version` should print a version.
+
+Use a token instead of the browser (for scripts): `gh auth login --with-token` reads a fine-grained token from stdin. Never paste a token into chat or commit it.
+
 ## Setup steps (do these in order)
 1. Run `scripts/detect.sh <project-dir>` to get the language and framework.
 2. Ask the user each question in the table above. Ask about each artifact separately. Record every answer in `distribution.json`.

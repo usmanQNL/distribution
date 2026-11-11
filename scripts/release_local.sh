@@ -4,6 +4,16 @@
 #        openssl (ed25519), and gh authenticated with the releases repo, or GH_TOKEN set.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"; cd "$root"
+
+# Preflight: git must be installed, and gh must be logged in to the releases repo
+if ! command -v git >/dev/null 2>&1; then
+  echo "git is not installed. Install it first (see distribution.md, 'Git on the local machine'), then run this again." >&2
+  exit 1
+fi
+if ! gh auth status >/dev/null 2>&1; then
+  echo "gh is not logged in. Run: gh auth login (see distribution.md), then run this again." >&2
+  exit 1
+fi
 cfg() { python3 -c "import json,sys;d=json.load(open('distribution.json'));print(eval(sys.argv[1]))" "$1"; }
 flag() { [ "$(cfg "d['targets']['$1']")" = "True" ]; }
 signing="$(cfg "d.get('signing','cosign')")"

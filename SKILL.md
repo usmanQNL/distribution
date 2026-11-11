@@ -42,7 +42,7 @@ Ask this before the signing question.
 - **GitHub** (default, `"build_location": "github"`): Actions builds, checksums, signs and publishes on every push to main. Pro: fully automatic, same machine every time, no local tools. Con: needs GitHub minutes and a secret for the releases repo. The Windows installer needs a Windows runner.
 - **Local** (`"build_location": "local"`): run `scripts/release_local.sh` (Linux or macOS) or `scripts/release_local.bat` (Windows, through Git Bash) on the user's machine. Pro: no CI setup and no minutes used, and you can test a build before publishing. Con: manual, and each OS builds only its own packages.
 
-When local is chosen, skip the Actions secret and the workflow steps, and tell the user to run the script on each OS they build for. Record the choice in `distribution.md`.
+When local is chosen, first check that git is installed (`git --version`). If it isn't, offer to install it and do not run a local release until it is. Also check `gh auth status`. Walk the user through `gh auth login` and `gh auth setup-git` if needed (the steps are in `distribution.md`). Then skip the Actions secret and the workflow steps, and tell the user to run the script on each OS they build for. Record the choice in `distribution.md`.
 
 **Q5. Checksums and signing**
 SHA256SUMS is always written. Signing is required, and the user picks one of these two. Record the choice as `signing` in `distribution.json`.

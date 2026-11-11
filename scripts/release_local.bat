@@ -14,6 +14,11 @@ if not defined BASH (
   exit /b 1
 )
 
+where git >nul 2>nul
+if errorlevel 1 (
+  echo git is not installed. Install Git for Windows from https://git-scm.com, then run this again.
+  exit /b 1
+)
 pushd "%~dp0.."
 "%BASH%" scripts/release_local.sh %*
 set "RC=%ERRORLEVEL%"
