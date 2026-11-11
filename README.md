@@ -7,7 +7,7 @@ A shareable Claude skill that sets up release builds for a Python, Node or mixed
 - Windows `.exe` (PyInstaller)
 - Linux `.sh` self-extracting installer and `.deb` package (built on Ubuntu runners)
 - A zipped SPA (`<name>-<version>-frontend.zip`) when the Node project has a `build` script
-- A Windows installer (Inno Setup)
+- A Windows installer (Inno Setup). The build needs ISCC, the Inno Setup 6 compiler: the skill checks for it during setup, and `scripts/ensure_iscc.sh` installs it when it is missing (choco on the GitHub Windows runner, winget or choco on a local Windows machine). Inno Setup runs only on Windows, so on Linux or macOS the local run skips the installer and says why.
 - A Docker image, if the user asks for one: the skill writes a `Dockerfile` and `.dockerignore`, every pull request builds the image, and every merge pushes it to GitHub Container Registry (`ghcr.io/<owner>/<repo>:<version>` and `:latest`), signed with cosign, with its digest in the release as `<name>-<version>-docker.txt`
 - Every file named `<name>-<version>-<platform>`, where `<name>` is the release name the user picks at setup (the project name by default), for example `acme-notes-1.202611110638-windows.exe`
 - `SHA256SUMS` plus a signature for each file (cosign with certificate, or Ed25519)
@@ -35,6 +35,7 @@ Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-depl
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`, `scripts/install-linux.sh`: Linux installer, package and install helper
 - `scripts/uv-deploy.sh`: uv-based run script for targets without PyInstaller
 - `scripts/prune_releases.sh`: opt-in deletion of old releases
+- `scripts/ensure_iscc.sh`: finds ISCC or installs Inno Setup 6, used only when the Windows installer is chosen (`--check` only looks)
 - `scripts/release_local.sh`, `scripts/release_local.bat`: local builds
 - `scripts/test_skill.sh`: the skill's own checks, run in CI
 - `scripts/check_dco.sh`: the DCO sign-off check, run in CI on every pull request, repo-only (not copied into projects)

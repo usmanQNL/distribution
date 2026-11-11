@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Usage: release_local.sh  -> build, checksum, sign and publish on THIS machine (build_location = "local").
 # On Linux, also publishes <app_name>-<version>-linux-install.sh (installs the .deb or .sh for the user, or system-wide with --system).
-# Needs: python3, pyinstaller (for exe/linux binary), zip (node), dpkg-deb (deb), cosign (cosign signing) or
-#        openssl (ed25519), and gh authenticated with the releases repo, or GH_TOKEN set.
+# Needs: python3, pyinstaller (for exe/linux binary), zip (node), dpkg-deb (deb), Inno Setup 6 (installer, Windows;
+#        installed with winget or choco if missing), cosign (cosign signing) or openssl (ed25519), and gh authenticated with the releases repo, or GH_TOKEN set.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"; cd "$root"
 
@@ -29,6 +29,14 @@ major="$(tr -d '[:space:]' < VERSION)"; stamp="$(date -u +%Y%m%d_%H%M)"
 ver="v$major.$stamp"              # release tag, same scheme as the workflow
 pkgver="$major.${stamp/_/}"       # package version for .deb, .sh and the installer
 out="$root/release"; rm -rf "$out"; mkdir -p "$out"
+# Inno Setup installer: find ISCC now, before the long build, and install Inno Setup 6 if it is missing (Windows only)
+iscc=""
+if flag windows_inno_installer; then
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) iscc="$(bash scripts/ensure_iscc.sh)" || { echo "stopping: the Windows installer is selected but Inno Setup is not available" >&2; exit 1; } ;;
+    *) echo "note: the Windows installer is selected, but Inno Setup runs only on Windows; this run skips it. Run scripts\\release_local.bat on Windows for it." >&2 ;;
+  esac
+fi
 if [ "$(cfg "d['targets'].get('docker',False)")" = "True" ]; then
   echo "note: the Docker image is built and pushed to GHCR only by the GitHub workflow; locally, run: docker build -t ${name,,}:$pkgver ." >&2
 fi
@@ -58,13 +66,10 @@ if [ "$(uname -s)" = "Linux" ] && { flag linux_sh || flag linux_deb; }; then
   sed "s/^APP=app\$/APP=$name/" "$root/scripts/install-linux.sh" > "$out/$name-$pkgver-linux-install.sh"
 fi
 
-# 4. Windows Inno Setup (needs Inno Setup 6 installed; run on Windows). It writes straight into release/.
-if flag windows_inno_installer; then
-  case "$(uname -s)" in
-    # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
-    MINGW*|MSYS*|CYGWIN*) MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DMyAppName=$name" "/DMyAppVersion=$pkgver" packaging/installer.iss ;;
-    *) echo "skipping the Windows installer: build it on Windows" >&2 ;;
-  esac
+# 4. Windows Inno Setup (ISCC found or installed in the preflight above; Windows only). It writes straight into release/.
+if [ -n "$iscc" ]; then
+  # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppName=$name" "/DMyAppVersion=$pkgver" packaging/installer.iss
 fi
 
 # 4b. uv deploy bundle: the source at this commit, with scripts/uv-deploy.sh inside
