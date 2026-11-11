@@ -22,6 +22,8 @@ Python projects can also deploy with uv instead of PyInstaller (`templates/uv-de
 ## Layout
 
 - `SKILL.md`: the instructions Claude follows
+- `distribution.md`: the agent-neutral guide (copied into each project)
+- `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to the guide
 - `templates/release.yml`: the GitHub Actions workflow
 - `templates/app.spec`: PyInstaller spec, with placeholders for entry point and frontend
 - `templates/uv-deploy.sh`: uv-based run script for targets without PyInstaller
