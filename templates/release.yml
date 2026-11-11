@@ -30,6 +30,7 @@ jobs:
       location: ${{ steps.cfg.outputs.location }}
       tag: ${{ steps.cfg.outputs.tag }}
       pkgver: ${{ steps.cfg.outputs.pkgver }}
+      docker: ${{ steps.cfg.outputs.docker }}
     steps:
       - uses: actions/checkout@v5
       - name: Read build location and set the version once for every job
@@ -37,10 +38,12 @@ jobs:
         shell: bash
         run: |
           loc=$(python3 -c "import json;print(json.load(open('distribution.json')).get('build_location','github'))")
+          docker=$(python3 -c "import json;print(str(json.load(open('distribution.json'))['targets'].get('docker',False)).lower())")
           major="$(tr -d '[:space:]' < VERSION)"
           stamp="$(date -u +%Y%m%d_%H%M)"
           {
             echo "location=$loc"
+            echo "docker=$docker"
             # Release tag: v<VERSION>.<yyyymmdd_hhmm> in UTC
             echo "tag=v$major.$stamp"
             # Package version for .deb, .sh and the installer: digits and dots only, grows with every release
@@ -142,9 +145,70 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Docker image (targets.docker): built on every pull request as a check. On main it is pushed to
+  # ghcr.io/<owner>/<repo> as :<version> and :latest, signed with cosign (keyless), and the release gets
+  # app-<version>-docker.txt with the image digest, which is checksummed and signed with the other files.
+  docker:
+    needs: config
+    if: needs.config.outputs.location == 'github' && needs.config.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      PKGVER: ${{ needs.config.outputs.pkgver }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build the image
+        shell: bash
+        run: |
+          [ -f Dockerfile ] || { echo "::error::targets.docker is true but there is no Dockerfile; run generate.sh again"; exit 1; }
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker build --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.version=$PKGVER" --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -t "$image:$PKGVER" -t "$image:latest" .
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Push to GitHub Container Registry (main only)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:$PKGVER"
+          docker push "$IMAGE:latest"
+          ref="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$PKGVER")"
+          echo "REF=$ref" >> "$GITHUB_ENV"
+          mkdir -p release
+          printf 'image: %s:%s\ndigest: %s\npull: docker pull %s\n' "$IMAGE" "$PKGVER" "$ref" "$ref" > "release/app-$PKGVER-docker.txt"
+      - name: Read signing mode
+        if: github.event_name != 'pull_request'
+        id: signing
+        shell: bash
+        run: |
+          mode=$(python3 -c "import json;print(json.load(open('distribution.json')).get('signing','cosign'))")
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+      # With ed25519 the image is covered by the signed app-<version>-docker.txt, which names its digest.
+      - uses: sigstore/cosign-installer@v3
+        if: github.event_name != 'pull_request' && steps.signing.outputs.mode == 'cosign'
+      - name: Sign the image (cosign)
+        if: github.event_name != 'pull_request' && steps.signing.outputs.mode == 'cosign'
+        shell: bash
+        run: cosign sign --yes "$REF"
+      - uses: actions/upload-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          name: release-docker
+          path: release/*
+          retention-days: 7
+
   publish:
-    needs: [config, build]
-    if: needs.config.outputs.location == 'github' && github.event_name != 'pull_request'
+    needs: [config, build, docker]
+    # docker is skipped when targets.docker is false; publish still runs then, but never after a failure
+    if: >-
+      !cancelled() && needs.config.outputs.location == 'github' && github.event_name != 'pull_request' &&
+      needs.build.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.docker.result)
     runs-on: ubuntu-latest
     permissions:
       contents: read

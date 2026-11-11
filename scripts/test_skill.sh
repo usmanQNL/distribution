@@ -32,6 +32,19 @@ grep -o 'scripts/[A-Za-z_.-]*\.sh' "$t/.github/workflows/release.yml" | sort -u 
   [ -f "$t/$s" ] && echo "ok: workflow calls $s" || { echo "FAIL: workflow calls missing $s" >&2; exit 1; }
 done || fail=1
 
+[ -f "$t/Dockerfile" ] && bad "generate wrote a Dockerfile with targets.docker false" || ok "no Dockerfile when docker is off"
+
+# 3a. With targets.docker true, generate.sh writes the Dockerfile that fits the language, and .dockerignore
+dock() { # dock <sample> <template>
+  d="$t/docker-$1"; cp -r "test/samples/$1" "$d"; printf '{"targets":{"docker":true}}' > "$d/distribution.json"
+  bash scripts/generate.sh "$d" >/dev/null
+  if cmp -s "$d/Dockerfile" "templates/$2" && cmp -s "$d/.dockerignore" templates/dockerignore; then ok "docker $1 gets $2"; else bad "docker $1 should get $2 and .dockerignore"; fi
+}
+dock flask Dockerfile.python
+dock fastapi Dockerfile.python
+dock python-uv Dockerfile.python
+dock node Dockerfile.node
+
 # 3b. The generated record is a fill-in template: placeholders present, no details from this skill's own project
 grep -q '<fill in' "$t/distribution.md" && ok "record has fill-in placeholders" || bad "record has no fill-in placeholders"
 grep -qi 'usmanQNL\|QuellDAP\|C:\\' "$t/distribution.md" && bad "record contains this skill's own project details" || ok "record has no project-specific details"
@@ -43,10 +56,13 @@ done
 
 # 4. Copies that must stay identical
 for pair in "distribution.md templates/distribution.md" "templates/release.yml .github/workflows/release.yml" \
-            "templates/installer.iss packaging/installer.iss"; do
+            "templates/installer.iss packaging/installer.iss" "templates/dockerignore .dockerignore"; do
   read -r a b <<< "$pair"
   if cmp -s "$a" "$b"; then ok "in sync: $a = $b"; else bad "out of sync: $a and $b"; fi
 done
+
+# This repo's own Dockerfile is the Python template with only CMD filled in
+if cmp -s <(grep -v '^CMD ' Dockerfile) <(grep -v '^CMD ' templates/Dockerfile.python); then ok "in sync: Dockerfile = templates/Dockerfile.python (apart from CMD)"; else bad "out of sync: Dockerfile and templates/Dockerfile.python"; fi
 
 # 5. Config files parse
 python3 -c "import json,sys; [json.load(open(f)) for f in sys.argv[1:]]" distribution.json templates/distribution.json && ok "json parses" || bad "json"
@@ -63,6 +79,14 @@ if not any("Delete build artifacts" in n for n in names("publish")): errs.append
 if any("Delete build artifacts" in n for n in names("prune")): errs.append("artifact cleanup must not be in the prune job")
 if jobs["publish"].get("permissions", {}).get("actions") != "write": errs.append("publish needs actions: write")
 if "pull_request" not in jobs["publish"]["if"]: errs.append("publish must not run on pull requests")
+d = jobs.get("docker")
+if not d: errs.append("docker job is missing")
+else:
+    if "docker" not in jobs["publish"]["needs"]: errs.append("publish must wait for the docker job")
+    if "skipped" not in jobs["publish"]["if"]: errs.append("publish must still run when the docker job is skipped")
+    if d.get("permissions", {}).get("packages") != "write": errs.append("docker needs packages: write")
+    for st in d["steps"]:
+        if "push" in str(st.get("run", "")).lower() and "pull_request" not in str(st.get("if", "")): errs.append("docker push must not run on pull requests")
 for e in errs: print("  " + e, file=sys.stderr)
 sys.exit(1 if errs else 0)
 PY
@@ -71,5 +95,17 @@ grep -q 'Source: "\.\.\\build\\dist\\app.exe"' templates/installer.iss && ok "in
 for f in templates/release.yml scripts/release_local.sh; do
   grep -q -- '--distpath build/dist' "$f" && ok "pyinstaller distpath in $f" || bad "pyinstaller must write to build/dist in $f"
 done
+
+# 7. The Dockerfile templates build on the samples (CI sets DOCKER_BUILD=1; needs a running Docker)
+if [ "${DOCKER_BUILD:-0}" = 1 ]; then
+  for s in flask fastapi python-uv; do
+    docker build -q -t "skilltest-$s" "$t/docker-$s" >/dev/null && ok "docker build $s" || bad "docker build $s"
+  done
+  for target in spa server; do
+    docker build -q --target "$target" -t "skilltest-node-$target" "$t/docker-node" >/dev/null && ok "docker build node --target $target" || bad "docker build node --target $target"
+  done
+else
+  echo "skip: docker builds (set DOCKER_BUILD=1)"
+fi
 
 [ "$fail" = 0 ] && echo "all checks passed" || { echo "checks failed" >&2; exit 1; }

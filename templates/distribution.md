@@ -17,6 +17,7 @@ Written by `scripts/generate.sh`. Every file is listed so an agent can find it w
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`: Linux `.sh` installer and `.deb` package.
 - `scripts/install-linux.sh`: installs the Linux release for a user, or system-wide with `--system`. Copied into each Linux release.
 - `scripts/uv-deploy.sh`: runs the app with uv on the target. Used only when `uv_deploy` is true: the release gets `app-<version>-uv.tar.gz` (the source at that commit), and the target extracts it and runs `bash scripts/uv-deploy.sh`. Needs a `pyproject.toml`. `APP_CMD` sets the command (default `python main.py`).
+- `Dockerfile`, `.dockerignore`: only when `targets.docker` is true. From `templates/Dockerfile.python` (Python or Mix) or `templates/Dockerfile.node` (Node, with a `spa` and a `server` stage; keep one). Fill in `CMD` and `EXPOSE`. The workflow's `docker` job builds it on every pull request and, on main, pushes `ghcr.io/<owner>/<repo>:<version>` and `:latest`, signed with cosign. Local runs do not build it.
 - `scripts/prune_releases.sh`: deletes releases older than `artifact_retention_days`. Runs only from a manual workflow run with `prune_releases` ticked. Try it first with `bash scripts/prune_releases.sh <owner/repo> <days> --dry-run`.
 - `scripts/release_local.sh` (Linux and macOS) and `scripts/release_local.bat` (Windows, calls the .sh through Git Bash): local builds. Used only when `build_location` is `local`.
 - `packaging/keys/release-signing-public.pem`: public key, only for `ed25519` signing. Never put the private key in the repo.
@@ -32,6 +33,7 @@ Every file in a release is named `app-<version>-<platform>[-<kind>].<ext>`, with
 - `app-<version>-linux-install.sh`: the install helper (`scripts/install-linux.sh`)
 - `app-<version>-frontend.zip`: the built SPA
 - `app-<version>-uv.tar.gz`: the source bundle for uv deploy
+- `app-<version>-docker.txt`: the Docker image name, tag and digest (the image itself is in GHCR as `ghcr.io/<owner>/<repo>:<version>`)
 - `SHA256SUMS`, and a `.bundle` (cosign) or `.sig` (ed25519) next to each file: these keep their standard names so `sha256sum -c` and the verify commands work unchanged.
 
 ## Answers recorded at setup (edit `distribution.json` to change)
@@ -49,6 +51,7 @@ The setup agent fills in the "Answer" column from the user's answers and writes 
 | Q4 | Linux .deb (`linux_deb`) | <fill in> | true / false |
 | Q4 | Node SPA zip (`node_spa_zip`) | <fill in> | true / false |
 | Q4 | uv deploy (`uv_deploy`) | <fill in> | true / false |
+| Q4 | Docker image to GHCR (`docker`) | <fill in> | true / false |
 | Q4b | Build location (`build_location`) | <fill in> | github, local |
 | Q5 | Signing (`signing`) | <fill in> | cosign, ed25519 |
 | Q6 | Release trigger and publishing | <fill in> | Every merge to main to a releases repo; other options are not built into the template |
@@ -62,6 +65,7 @@ Fill in every line. The setup agent writes these from the user's answers. Never 
 - Releases repo (public, must have at least one commit): <fill in: owner/repo>, saved as `releases_repo` in `distribution.json`
 - Repo variable `RELEASES_REPO` (optional, GitHub runs): <fill in: owner/repo, or "not set" to use `<repo>-releases`>
 - Repo secret `RELEASES_REPO_TOKEN`: a fine-grained token with Contents read and write on the releases repo only. Created by the user on GitHub. Its value is never recorded here. Status: <fill in: added / not yet added>
+- Docker image (Docker only): <fill in: ghcr.io/owner/repo, and whether the package is public or private, or "not used">. No secret: the workflow uses its own `GITHUB_TOKEN`.
 - Repo secret `RELEASE_SIGNING_KEY` (ed25519 only): the whole PEM private key. Its value is never recorded here. Status: <fill in: added / not needed>
 - Local working folder (for `build_location: local` only): <fill in: path on the user's machine, or "not used">
 - Git and gh on the local machine (local only): <fill in: installed and logged in / not checked>
@@ -109,11 +113,14 @@ Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` 
 - cosign, release from GitHub Actions (one `.bundle` per file): `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
 - cosign, release made locally (only `SHA256SUMS.bundle`, signed with the person's own login): `cosign verify-blob --bundle SHA256SUMS.bundle --certificate-identity <email used to sign> --certificate-oidc-issuer <issuer> SHA256SUMS`, then `sha256sum -c SHA256SUMS`. The issuer is the one picked at sign-in: `https://github.com/login/oauth`, `https://accounts.google.com` or `https://login.microsoftonline.com`. Record the email and issuer in this file so others can verify.
 - ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
+- Docker image, cosign: `cosign verify ghcr.io/<owner>/<repo>@<digest> --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com`, with the digest from `app-<version>-docker.txt`. With ed25519, verify that file's `.sig`; it names the digest.
 
 ## Known gotchas (learned the hard way)
 - PyInstaller resolves `ENTRY` relative to the spec's folder (`packaging/`).
 - Git Bash rewrites arguments that start with `/` into Windows paths, so ISCC sees `/DMyAppVersion=...` as a second script ("You may not specify more than one script filename"). Run ISCC with `MSYS_NO_PATHCONV=1`.
 - The publish job must check out the repo, or `scripts/` is missing.
+- The publish job waits for the `docker` job. When Docker is off that job is skipped, so publish uses `!cancelled()` and accepts `skipped`; without that, GitHub would skip publish too.
+- GHCR image names must be lowercase, so the workflow lowercases `<owner>/<repo>`.
 - An empty releases repo fails with HTTP 422 "Repository is empty".
 - A 403 from `gh release create` means the token is missing repo access or Contents write.
 - Runs on `main` go one after another. GitHub keeps only one waiting run, so a burst of merges comes out as one release built from the newest commit. Pull request runs cancel older runs of the same PR.
@@ -123,6 +130,7 @@ Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` 
 
 ## Not done yet (do not assume these work)
 - Setup choices not in the template: frontend shipped beside the exe, manual tag releases, keeping artifacts only in Actions, and publishing through `repository_dispatch`.
-- The uv deploy bundle is built, but running it on a target has not been tested. Docker is not generated.
+- The uv deploy bundle is built, but running it on a target has not been tested.
+- Docker: the image is Linux amd64 only, and local runs (`release_local.sh`) do not build or push it.
 - `prune_releases` has not been run against a real releases repo; use `--dry-run` first.
 - Local releases on Windows (Inno Setup through Git Bash) have not been tested end to end.
