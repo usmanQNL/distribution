@@ -10,7 +10,7 @@ cp "$root/templates/release.yml" "$target/.github/workflows/release.yml"
 [ -f "$target/packaging/installer.iss" ] || cp "$root/templates/installer.iss" "$target/packaging/installer.iss"
 [ -f "$target/distribution.md" ] || cp "$root/templates/distribution.md" "$target/distribution.md"
 mkdir -p "$target/scripts"
-for s in checksums.sh sign.sh make_sh.sh make_deb.sh; do
+for s in checksums.sh sign.sh make_sh.sh make_deb.sh prune_releases.sh; do
   cp "$root/scripts/$s" "$target/scripts/$s"
 done
 cp "$root/templates/install-linux.sh" "$target/scripts/install-linux.sh"
