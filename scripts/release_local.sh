@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Usage: release_local.sh  -> build, checksum, sign and publish on THIS machine (build_location = "local").
+# On Linux, also publishes install-linux.sh (installs the .deb or .sh for the user, or system-wide with --system).
 # Needs: python3, pyinstaller (for exe/linux binary), zip (node), dpkg-deb (deb), cosign (cosign signing) or
 #        openssl (ed25519), and gh authenticated with the releases repo, or GH_TOKEN set.
 set -euo pipefail
@@ -41,6 +42,8 @@ if [ "$(uname -s)" = "Linux" ]; then
   flag linux_sh && bash scripts/make_sh.sh "$src" "$out/app-$(cat VERSION)-linux.sh"
   flag linux_deb && bash scripts/make_deb.sh "$src" app "$(cat VERSION)" "$out"
   [ -f "$out/app" ] && { flag linux_sh || flag linux_deb; } && rm -f "$out/app"
+  # Install script for Linux users, published alongside the installers
+  { flag linux_sh || flag linux_deb; } && cp "$root/templates/install-linux.sh" "$out/install-linux.sh"
 fi
 
 # 4. Windows Inno Setup (needs Inno Setup 6 installed; run on Windows)

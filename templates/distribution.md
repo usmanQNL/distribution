@@ -10,6 +10,7 @@ On every push to `main` (and on manual run), GitHub Actions builds the selected 
 - `.github/workflows/release.yml`: the workflow. Do not edit unless changing the pipeline.
 - `packaging/app.spec`: PyInstaller spec. `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root.
 - `packaging/installer.iss`: Inno Setup script, used only when `windows_inno_installer` is true.
+- `templates/install-linux.sh` (copied to the release as `install-linux.sh` when a Linux installer is selected): installs the app for the user, or system-wide with `--system`.
 - `packaging/keys/release-signing-public.pem`: public key, only for `ed25519` signing. Never put the private key in the repo.
 - `scripts/checksums.sh`, `scripts/sign.sh`, `scripts/make_sh.sh`, `scripts/make_deb.sh`: build and signing helpers.
 - `VERSION`: the major version number. The release tag is `v<VERSION>.<yyyymmdd_hhmm>` in UTC.
