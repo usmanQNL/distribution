@@ -37,6 +37,7 @@ Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-depl
 - `scripts/prune_releases.sh`: opt-in deletion of old releases
 - `scripts/release_local.sh`, `scripts/release_local.bat`: local builds
 - `scripts/test_skill.sh`: the skill's own checks, run in CI
+- `scripts/check_dco.sh`: the DCO sign-off check, run in CI on every pull request, repo-only (not copied into projects)
 - `test/samples/`: HelloWorld apps for node, python-uv, flask, streamlit and fastapi
 - `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`: the skill's dual license
 - `CONTRIBUTING.md`: how to contribute, including the DCO sign-off

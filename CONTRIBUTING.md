@@ -32,6 +32,8 @@ This adds a line with your name and email from your git config:
 Signed-off-by: Your Name <you@example.com>
 ```
 
+CI checks every commit in a pull request and fails if one has no sign-off matching its author (`scripts/check_dco.sh`). Merge commits are skipped.
+
 To sign off commits you already made on your branch, run `git rebase --signoff main` and force-push the branch.
 
 ## Pull requests
