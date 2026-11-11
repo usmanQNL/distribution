@@ -22,8 +22,8 @@ Ask these one at a time. For each question, give the options with a short pro an
 
 **Q3. Python web framework (if Python is used)**
 - None (CLI or desktop): PyInstaller only.
-- Flask or FastAPI, bundle the built frontend inside the executable (recommended): one file runs the whole app. Pro: one artifact. Con: larger file.
-- Flask or FastAPI, ship the frontend beside the executable: smaller build. Con: two folders to keep in sync.
+- Flask or FastAPI, bundle the built frontend inside the executable (recommended): one file runs the whole app. Pro: one artifact. Con: larger file. Set `bundle_frontend: true`, `frontend_dir` (the folder with `package.json`) and `frontend_dist` (its build output, usually `dist`) in `distribution.json`, and add the built folder to `DATAS` in `packaging/app.spec`. The workflow builds the frontend before PyInstaller.
+- Flask or FastAPI, ship the frontend beside the executable: smaller build. Con: two folders to keep in sync. Not built into the template yet.
 - Deploy with uv on the target instead of PyInstaller: Pro: no binaries to build. Con: the target needs Python and uv.
 
 **Q4. Artifacts, asked one at a time**
@@ -32,8 +32,8 @@ Ask about each artifact separately. Only the ones the user says yes to are built
 - **Windows installer** (`windows_inno_installer`): an Inno Setup setup file built from `packaging/installer.iss`. Pro: Start menu entry, uninstaller and a standard install. Con: needs the .exe too, and the build runs on a Windows runner.
 - **Linux .sh** (`linux_sh`): a self-extracting installer. Pro: runs on any distro. Con: a bit larger, since it bundles the app.
 - **Linux .deb** (`linux_deb`): a Debian or Ubuntu package. Pro: installs with apt or dpkg. Con: only for Debian-based systems.
-- **Node SPA zip** (`node_spa_zip`): the `npm run build` output zipped. Pro: small and simple. Con: needs a server to serve it.
-- **uv deploy** (`uv_deploy`): no binary, the target runs the app with uv. Pro: no build step. Con: the target needs Python and uv. Copies `templates/uv-deploy.sh`.
+- **Node SPA zip** (`node_spa_zip`): the `npm run build` output zipped, once per release (`frontend-<version>.zip`). Pro: small and simple. Con: needs a server to serve it.
+- **uv deploy** (`uv_deploy`): no binary, the target runs the app with uv. The release gets `app-<version>-uv.tar.gz`, the source at that commit with `scripts/uv-deploy.sh` inside. Pro: no build step. Con: the target needs Python and uv, and the project needs a `pyproject.toml`.
 
 Default: only the Windows .exe is on. Each option is a separate choice, and the workflow builds only the ones marked `true`.
 
@@ -50,13 +50,14 @@ SHA256SUMS is always written. Signing is required, and the user picks one of the
 - **ed25519** (`"signing": "ed25519"`): a signature per file made with your own Ed25519 key. Pro: works offline, no Sigstore dependency, and verification needs only OpenSSL. Con: you must keep the private key safe. It lives in the `RELEASE_SIGNING_KEY` secret, and if it leaks you must rotate it.
 
 **Q6. Release trigger and publishing**
-- Every merge to main creates a release (recommended, matches QuellDAP). Version: `v<major>.yyyymmdd_hhmm` (UTC), with the major number read from a VERSION file.
-- Manual tag only. Pro: fewer releases. Con: someone must remember to tag.
-- Publish to a separate public releases repository (recommended). The workflow sends a `repository_dispatch` or copies the files using a token secret.
-- Keep artifacts only in this repo's Actions artifacts. Pro: no second repo. Con: not public.
+- Every merge to main creates a release (recommended, matches QuellDAP). Tag: `v<major>.yyyymmdd_hhmm` (UTC), with the major number read from a VERSION file. Packages (.deb, .sh, installer) use `<major>.yyyymmddhhmm`, so each release is a newer package version. Runs go one at a time; if several merges land while one runs, GitHub keeps only the newest waiting run, so they come out as one release built from the newest commit.
+- Manual tag only. Pro: fewer releases. Con: someone must remember to tag. Not built into the template yet.
+- Publish to a separate public releases repository (recommended). The workflow uploads the files with `gh release create` using a token secret. A `repository_dispatch` option is not built yet.
+- Keep artifacts only in this repo's Actions artifacts. Pro: no second repo. Con: not public. Not built into the template yet.
 
 **Q7. Artifact retention**
-- Keep 7 days of Actions artifacts and prune older release runs (recommended).
+- Keep 7 days of Actions artifacts (recommended). Build artifacts are deleted as soon as a publish succeeds, since the release holds the files; the 7 days cover pull request builds and failed publishes.
+- Delete old releases too (opt-in): a manual run with `prune_releases` ticked deletes releases older than `artifact_retention_days`. It never runs on its own.
 - Keep everything. Con: storage grows.
 
 ## Step 2: Generate
@@ -66,11 +67,12 @@ After the answers are saved in `distribution.json`:
 1. Run `scripts/detect.sh <project-dir>` to confirm the language and Python framework. It prints `language=` (node, python, mix) and `python_framework=` (flask, fastapi, streamlit or none).
 2. Run `scripts/generate.sh <project-dir>` to write:
    - `.github/workflows/release.yml`, copied from `templates/release.yml`
-   - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one. Set the `targets` flags from the answers.
+   - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one. Set the `targets` flags and the frontend keys from the answers.
    - `packaging/app.spec` and `packaging/installer.iss`, unless the project already has them
-3. Copy `scripts/checksums.sh` and `scripts/sign.sh` into the project's `scripts/` folder. The release workflow calls them.
-4. Write the answers and repo details into the project's `distribution.md` (copied from `templates/distribution.md`). Fill in every `<fill in>` cell: the answers, the repos, the secrets' status and the local folder. Never write a token or key value. Keep it current whenever an answer changes. It is the agent-neutral record, so a new agent from any provider can run the release cycle from it. A record with any `<fill in>` left is not finished.
-5. Tell the user which files were written and what to commit. The user commits and pushes; this skill does not push.
+   - `scripts/`: `checksums.sh`, `sign.sh`, `make_sh.sh`, `make_deb.sh`, `prune_releases.sh`, `install-linux.sh` and `uv-deploy.sh`. The workflow calls them.
+   - `distribution.md` and the `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` pointers
+3. Write the answers and repo details into the project's `distribution.md` (copied from `templates/distribution.md`). Fill in every `<fill in>` cell: the answers, the repos, the secrets' status and the local folder. Never write a token or key value. Keep it current whenever an answer changes. It is the agent-neutral record, so a new agent from any provider can run the release cycle from it. A record with any `<fill in>` left is not finished.
+4. Tell the user which files were written and what to commit. The user commits and pushes; this skill does not push.
 
 The Python spec needs its entry point and any built frontend filled in. Fill in `ENTRY` and `DATAS` for the project.
 
@@ -95,16 +97,17 @@ Walk the user through this, one step at a time. Wait for confirmation before the
      openssl pkey -in release-signing-private.pem -pubout -out packaging/keys/release-signing-public.pem
      ```
      Commit `packaging/keys/release-signing-public.pem`. Add the private file to the repo secrets as `RELEASE_SIGNING_KEY` (paste the whole PEM contents), then delete the local private file or keep it somewhere safe. Never commit it.
-5. **Turn on branch protection for main.** Require the release workflow to pass before merge, so a broken build cannot merge.
+5. **Turn on branch protection for main.** The release workflow runs its build jobs on every pull request (it publishes only from main). Require `build (ubuntu-latest)` and `build (windows-latest)` to pass before merge, so a broken build cannot merge.
 6. **Trigger the first run.** Merge a small change to main, or use the Actions tab, Run workflow. Open the run and check each job is green.
 7. **Verify the release.** Download the artifacts, `SHA256SUMS`, and the signature files (`.bundle` for cosign, `.sig` for ed25519). Then:
    - Checksums: `sha256sum -c SHA256SUMS`
    - If cosign: `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
+   - If cosign and the release was made locally: only `SHA256SUMS` is signed, with the person's own identity. See "Verify a release" in `distribution.md`.
    - If ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
 
 For each step, the skill says what to click and what a green result looks like. If a step fails, the skill reads the log and suggests the fix. It does not guess at the secret name or token scope.
 
-Local checks, when possible: `pyinstaller --noconfirm packaging/app.spec` for the Python build. Windows-only installers cannot be built on Linux, so report those as checked only in Actions.
+Local checks, when possible: `pyinstaller --noconfirm --distpath build/dist --workpath build/work packaging/app.spec` for the Python build. Windows-only installers cannot be built on Linux, so report those as checked only in Actions.
 
 ## Rules
 

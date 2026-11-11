@@ -3,24 +3,24 @@
 Read this file first if you are asked to build, sign or publish release artifacts for this project. It is written so any agent (any model provider) can run the release cycle from scratch.
 
 ## What this does
-On every push to `main` (and on manual run), GitHub Actions builds the selected artifacts, writes `SHA256SUMS`, signs them, and publishes a GitHub release to a separate public releases repository.
+On every pull request, GitHub Actions builds the selected artifacts as a check. On every push to `main` (and on manual run), it also writes `SHA256SUMS`, signs the files, publishes a GitHub release to a separate public releases repository, and then deletes the build artifacts from Actions storage.
 
 ## Files in this project
 Written by `scripts/generate.sh`. Every file is listed so an agent can find it without reading the scripts.
-- `distribution.json`: the answers in machine form. The scripts read it. Edit it to change what is built.
+- `distribution.json`: the answers in machine form. The scripts read it. Edit it to change what is built. Besides `targets`, it holds `bundle_frontend`, `frontend_dir` (folder with `package.json`) and `frontend_dist` (its build output) for apps with a frontend.
 - `distribution.md`: this file. It holds the human-readable record of the same answers.
 - `.github/workflows/release.yml`: the GitHub Actions workflow. Do not edit unless changing the pipeline.
-- `packaging/app.spec`: PyInstaller spec. `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root.
-- `packaging/installer.iss`: Inno Setup script. Used only when `windows_inno_installer` is true.
+- `packaging/app.spec`: PyInstaller spec. `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root. PyInstaller writes to `build/dist/`, apart from a frontend's `dist/`.
+- `packaging/installer.iss`: Inno Setup script. Used only when `windows_inno_installer` is true. Its paths are relative to `packaging/`, so the exe is `..\build\dist\app.exe`.
 - `scripts/checksums.sh`: writes `SHA256SUMS`.
 - `scripts/sign.sh`: signs with cosign or ed25519.
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`: Linux `.sh` installer and `.deb` package.
 - `scripts/install-linux.sh`: installs the Linux release for a user, or system-wide with `--system`. Copied into each Linux release.
-- `scripts/uv-deploy.sh`: runs the app with uv on the target. Used only when `uv_deploy` is true.
-- `scripts/prune_releases.sh`: deletes old releases. Runs only from a manual workflow run with `prune_releases` ticked.
+- `scripts/uv-deploy.sh`: runs the app with uv on the target. Used only when `uv_deploy` is true: the release gets `app-<version>-uv.tar.gz` (the source at that commit), and the target extracts it and runs `bash scripts/uv-deploy.sh`. Needs a `pyproject.toml`. `APP_CMD` sets the command (default `python main.py`).
+- `scripts/prune_releases.sh`: deletes releases older than `artifact_retention_days`. Runs only from a manual workflow run with `prune_releases` ticked. Try it first with `bash scripts/prune_releases.sh <owner/repo> <days> --dry-run`.
 - `scripts/release_local.sh` (Linux and macOS) and `scripts/release_local.bat` (Windows, calls the .sh through Git Bash): local builds. Used only when `build_location` is `local`.
 - `packaging/keys/release-signing-public.pem`: public key, only for `ed25519` signing. Never put the private key in the repo.
-- `VERSION`: the major version number. The release tag is `v<VERSION>.<yyyymmdd_hhmm>` in UTC.
+- `VERSION`: the major version number. The release tag is `v<VERSION>.<yyyymmdd_hhmm>` in UTC. Packages (.deb, .sh, installer, zips) use `<VERSION>.<yyyymmddhhmm>`, so every release is a newer package version. If a tag already exists, the run adds a suffix.
 - `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to this file for each agent.
 
 ## Answers recorded at setup (edit `distribution.json` to change)
@@ -30,7 +30,8 @@ The setup agent fills in the "Answer" column from the user's answers and writes 
 |---|---|---|---|
 | Q1 | Language | <fill in> | Python only, Node only, Mix |
 | Q2 | Node is a single-page app (SPA)? (Node only) | <fill in> | Yes (static files), No (Node server) |
-| Q3 | Python framework and frontend | <fill in> | None, Flask/FastAPI bundled, Flask/FastAPI beside, uv deploy |
+| Q3 | Python framework and frontend | <fill in> | None, Flask/FastAPI bundled, Flask/FastAPI beside (not built yet), uv deploy |
+| Q3 | Frontend bundled in the exe (`bundle_frontend`, `frontend_dir`, `frontend_dist`) | <fill in> | false, or true with the folder and its build output |
 | Q4 | Windows .exe (`windows_exe`) | <fill in> | true / false |
 | Q4 | Windows Inno Setup installer (`windows_inno_installer`) | <fill in> | true / false |
 | Q4 | Linux .sh (`linux_sh`) | <fill in> | true / false |
@@ -40,7 +41,7 @@ The setup agent fills in the "Answer" column from the user's answers and writes 
 | Q4b | Build location (`build_location`) | <fill in> | github, local |
 | Q5 | Signing (`signing`) | <fill in> | cosign, ed25519 |
 | Q6 | Release trigger and publishing | <fill in> | Every merge to main to a releases repo; other options are not built into the template |
-| Q7 | Artifact retention (`artifact_retention_days`) | <fill in> | 7 (default), keep everything |
+| Q7 | Artifact retention (`artifact_retention_days`) | <fill in> | 7 (default), keep everything. Old releases are deleted only by a manual run with `prune_releases` |
 | - | App name and entry point (`app_name`, `entry`) | <fill in> | |
 
 ## Repos, secrets, folders (fill in for this project)
@@ -94,7 +95,8 @@ Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` 
 
 ## Verify a release
 - Checksums: `sha256sum -c SHA256SUMS`
-- cosign: `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
+- cosign, release from GitHub Actions (one `.bundle` per file): `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
+- cosign, release made locally (only `SHA256SUMS.bundle`, signed with the person's own login): `cosign verify-blob --bundle SHA256SUMS.bundle --certificate-identity <email used to sign> --certificate-oidc-issuer <issuer> SHA256SUMS`, then `sha256sum -c SHA256SUMS`. The issuer is the one picked at sign-in: `https://github.com/login/oauth`, `https://accounts.google.com` or `https://login.microsoftonline.com`. Record the email and issuer in this file so others can verify.
 - ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
 
 ## Known gotchas (learned the hard way)
@@ -102,12 +104,13 @@ Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` 
 - The publish job must check out the repo, or `scripts/` is missing.
 - An empty releases repo fails with HTTP 422 "Repository is empty".
 - A 403 from `gh release create` means the token is missing repo access or Contents write.
-- The workflow runs use one concurrency group, so runs go one after another.
-- Packaging order: Linux `.sh` and `.deb` must be built after PyInstaller. The raw Linux binary is removed from the release once `.sh` or `.deb` contains it.
+- Runs on `main` go one after another. GitHub keeps only one waiting run, so a burst of merges comes out as one release built from the newest commit. Pull request runs cancel older runs of the same PR.
+- The workflow and `release_local.sh` call scripts from `scripts/`. If one is missing, the build fails with `cp: cannot stat`; run `generate.sh` again.
+- Packaging order: the frontend builds first, then PyInstaller, then the Linux `.sh` and `.deb` and the Inno installer. The raw Linux binary is not published; the `.sh` and `.deb` contain it.
 - Node 24 is the target. Actions are pinned to Node 24 runtimes (checkout v5, setup-node v5, setup-python v6, upload and download artifact v5). `cosign-installer` is still v3 and not yet checked against Node 24.
 
 ## Not done yet (do not assume these work)
-- cosign signing, the publish step and the PyInstaller build were verified only in CI, and only partly.
-- uv deploy and Docker are not tested. Docker is not generated.
-- The 7-day artifact retention and pruning are not in the template yet.
-- The .deb build has not been checked on a real Ubuntu runner end to end.
+- Setup choices not in the template: frontend shipped beside the exe, manual tag releases, keeping artifacts only in Actions, and publishing through `repository_dispatch`.
+- The uv deploy bundle is built, but running it on a target has not been tested. Docker is not generated.
+- `prune_releases` has not been run against a real releases repo; use `--dry-run` first.
+- Local releases on Windows (Inno Setup through Git Bash) have not been tested end to end.
