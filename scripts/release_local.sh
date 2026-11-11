@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: release_local.sh  -> build, checksum, sign and publish on THIS machine (build_location = "local").
 # On Linux, also publishes <app_name>-<version>-linux-install.sh (installs the .deb or .sh for the user, or system-wide with --system).
-# Needs: python3, pyinstaller (for exe/linux binary), zip (node), dpkg-deb (deb), Inno Setup 6 (installer, Windows;
+# Needs: gh (installed by scripts/ensure_gh.sh if missing, then logged in, or GH_TOKEN set), python3, pyinstaller (for exe/linux binary), zip (node), dpkg-deb (deb), Inno Setup 6 (installer, Windows;
 #        installed with winget or choco if missing), cosign (cosign signing) or openssl (ed25519), and gh authenticated with the releases repo, or GH_TOKEN set.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"; cd "$root"
@@ -11,9 +11,18 @@ if ! command -v git >/dev/null 2>&1; then
   echo "git is not installed. Install it first (see distribution.md, 'Git on the local machine'), then run this again." >&2
   exit 1
 fi
-if ! gh auth status >/dev/null 2>&1; then
-  echo "gh is not logged in. Run: gh auth login (see distribution.md), then run this again." >&2
-  exit 1
+# The GitHub CLI publishes the release: find it, or install it (winget/choco, brew, apt/dnf/pacman/zypper)
+gh_bin="$(bash scripts/ensure_gh.sh)" || { echo "stopping: the GitHub CLI (gh) is needed to publish the release" >&2; exit 1; }
+PATH="$(dirname "$gh_bin"):$PATH"   # a fresh install may not be on this shell's PATH yet
+if [ -z "${GH_TOKEN:-}" ] && ! gh auth status >/dev/null 2>&1; then
+  if [ -t 0 ] && [ -t 1 ]; then
+    echo "gh is not logged in. Starting: gh auth login (choose GitHub.com, HTTPS, Login with a web browser)" >&2
+    gh auth login --hostname github.com --git-protocol https --web && gh auth setup-git \
+      || { echo "gh login did not finish. Run: gh auth login (see distribution.md), then run this again." >&2; exit 1; }
+  else
+    echo "gh is not logged in. Run: gh auth login (see distribution.md), or set GH_TOKEN, then run this again." >&2
+    exit 1
+  fi
 fi
 cfg() { python3 -c "import json,sys;d=json.load(open('distribution.json'));print(eval(sys.argv[1]))" "$1"; }
 flag() { [ "$(cfg "d['targets']['$1']")" = "True" ]; }

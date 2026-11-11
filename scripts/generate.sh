@@ -18,7 +18,7 @@ fi
 [ -f "$target/packaging/installer.iss" ] || cp "$root/templates/installer.iss" "$target/packaging/installer.iss"
 [ -f "$target/distribution.md" ] || cp "$root/templates/distribution.md" "$target/distribution.md"
 mkdir -p "$target/scripts"
-for s in checksums.sh sign.sh make_sh.sh make_deb.sh prune_releases.sh install-linux.sh uv-deploy.sh ensure_iscc.sh; do
+for s in checksums.sh sign.sh make_sh.sh make_deb.sh prune_releases.sh install-linux.sh uv-deploy.sh ensure_iscc.sh ensure_gh.sh; do
   cp "$root/scripts/$s" "$target/scripts/$s"
 done
 # Docker: only when the project's distribution.json has targets.docker true. Node projects get the Node file, the rest the Python one.

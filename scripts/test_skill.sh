@@ -24,7 +24,7 @@ expect node        "language=node python_framework=none "
 t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT
 bash scripts/generate.sh "$t" >/dev/null
 for f in .github/workflows/release.yml distribution.json distribution.md packaging/app.spec packaging/installer.iss \
-         scripts/checksums.sh scripts/sign.sh scripts/make_sh.sh scripts/make_deb.sh scripts/prune_releases.sh scripts/install-linux.sh scripts/uv-deploy.sh scripts/ensure_iscc.sh; do
+         scripts/checksums.sh scripts/sign.sh scripts/make_sh.sh scripts/make_deb.sh scripts/prune_releases.sh scripts/install-linux.sh scripts/uv-deploy.sh scripts/ensure_iscc.sh scripts/ensure_gh.sh; do
   [ -f "$t/$f" ] && ok "generated $f" || bad "generate did not write $f"
 done
 # every scripts/ path the generated workflow calls must exist in the output
@@ -105,6 +105,10 @@ grep -q 'scripts/ensure_iscc.sh' templates/release.yml && grep -q 'scripts/ensur
 if [ "$(uname -s)" = Linux ]; then
   if bash scripts/ensure_iscc.sh 2>"$t/iscc.err"; then bad "ensure_iscc.sh must fail off Windows"; else grep -q 'only on Windows' "$t/iscc.err" && ok "ensure_iscc.sh explains Inno Setup is Windows-only" || bad "ensure_iscc.sh must explain it needs Windows"; fi
 fi
+grep -q 'scripts/ensure_gh.sh' scripts/release_local.sh && ok "release_local.sh finds or installs gh" || bad "release_local.sh must call scripts/ensure_gh.sh"
+if command -v gh >/dev/null 2>&1; then [ "$(bash scripts/ensure_gh.sh --check)" = "$(command -v gh)" ] && ok "ensure_gh.sh --check finds gh" || bad "ensure_gh.sh --check must print the gh path"; fi
+if grep -qiE 'where bash|set "BASH=bash"' scripts/release_local.bat; then bad "release_local.bat must not fall back to a bare bash (WSL)"; else ok "release_local.bat never uses a bare bash"; fi
+grep -q "where git" scripts/release_local.bat && grep -q 'bin\\bash.exe' scripts/release_local.bat && ok "release_local.bat finds Git's bash.exe from git.exe" || bad "release_local.bat must find bash.exe next to git.exe"
 grep -q 'get("app_name")' templates/app.spec && ok "spec reads app_name" || bad "templates/app.spec must read NAME from app_name"
 grep -q '^APP=app$' scripts/install-linux.sh && ok "install helper has the APP=app line the build replaces" || bad "install-linux.sh needs an APP=app line"
 p="$t/pkg"; mkdir -p "$p/src"; echo hi > "$p/src/demo"
