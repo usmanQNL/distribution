@@ -22,6 +22,8 @@ Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-depl
 4. Claude runs `scripts/detect.sh` and `scripts/generate.sh`, then guides you through the GitHub setup.
 5. Commit the generated files and push. The release workflow runs on the next merge to main.
 
+**Full Linux + Windows + Docker release: choose GitHub (Actions) as the build location.** Only GitHub Actions builds every target, on its Windows and Linux runners, and pushes the Docker image, all into one release. A local build makes only the packages for the machine it runs on (the .exe and installer on Windows, the .sh and .deb on Linux), never builds the Docker image, and publishes a separate release each time it runs. Local is useful for a quick single-platform release or for testing a build.
+
 For local releases (`scripts/release_local.sh`, or `scripts\release_local.bat` on Windows), the script first checks for the GitHub CLI (`gh`) and installs it if it is missing (winget or choco on Windows, brew on macOS, the official apt repo or dnf, pacman or zypper on Linux). It then checks that `gh` is logged in and starts `gh auth login` if it is not (or set `GH_TOKEN`). When the Windows installer is chosen it does the same for Inno Setup.
 
 ### Ed25519 signing: set RELEASE_SIGNING_KEY
