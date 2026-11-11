@@ -2,7 +2,7 @@
 REM Usage: scripts/release_local.bat  -> runs scripts\release_local.sh on Windows through Git Bash.
 REM Needs Git for Windows (provides bash), Python, PyInstaller, Inno Setup 6 (for the installer; installed
 REM with winget or choco if missing),
-REM and gh logged in (or GH_TOKEN set). cosign or openssl for signing, per distribution.json.
+REM and gh (the GitHub CLI; installed with winget or choco if missing) logged in (or GH_TOKEN set). cosign or openssl for signing, per distribution.json.
 setlocal
 
 set "BASH="
