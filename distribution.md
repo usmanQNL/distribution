@@ -31,7 +31,7 @@ On every push to `main` (and on manual run), GitHub Actions builds the selected 
 | Signing | `cosign` (default) | `cosign` or `ed25519`. CI signs each file with cosign. Local `cosign` mode signs only `SHA256SUMS` (one sign-in per run), so verify local releases with `SHA256SUMS.bundle`. Use `cosign-all` in the script for per-file bundles. |
 | Trigger | every merge to main, plus manual run | |
 | Publish | separate public releases repo | |
-| Artifact retention | 7 days (recorded as `artifact_retention_days` in `distribution.json`; pruning not implemented yet) | |
+| Artifact retention | 7 days: the workflow uploads build artifacts with `retention-days: 7`. Release pruning in the releases repo is not implemented. | |
 
 ## Repos, secrets, folders (as used in this project)
 - Skill source: `usmanQNL/distribution` (local: `C:\development\claudeCode\skills\distribution`).

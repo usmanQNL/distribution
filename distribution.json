@@ -10,6 +10,7 @@
     "uv_deploy": false
   },
   "signing": "cosign",
+  "artifact_retention_days": 7,
   "build_location": "github",
   "releases_repo": "usmanQNL/distribution-test"
 }
