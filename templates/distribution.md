@@ -101,6 +101,7 @@ Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` 
 
 ## Known gotchas (learned the hard way)
 - PyInstaller resolves `ENTRY` relative to the spec's folder (`packaging/`).
+- Git Bash rewrites arguments that start with `/` into Windows paths, so ISCC sees `/DMyAppVersion=...` as a second script ("You may not specify more than one script filename"). Run ISCC with `MSYS_NO_PATHCONV=1`.
 - The publish job must check out the repo, or `scripts/` is missing.
 - An empty releases repo fails with HTTP 422 "Repository is empty".
 - A 403 from `gh release create` means the token is missing repo access or Contents write.

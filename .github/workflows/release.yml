@@ -116,7 +116,8 @@ jobs:
           iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
           [ -f "$iscc" ] || choco install innosetup -y --no-progress
           mkdir -p release
-          "$iscc" "/DMyAppVersion=$PKGVER" packaging/installer.iss
+          # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
+          MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppVersion=$PKGVER" packaging/installer.iss
           ls release/*-setup.exe
       - name: uv deploy bundle (Linux runner only, if selected)
         if: runner.os == 'Linux' && steps.targets.outputs.uv_deploy == 'true'

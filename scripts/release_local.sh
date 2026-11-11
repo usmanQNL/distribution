@@ -55,7 +55,8 @@ fi
 # 4. Windows Inno Setup (needs Inno Setup 6 installed; run on Windows). It writes straight into release/.
 if flag windows_inno_installer; then
   case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DMyAppVersion=$pkgver" packaging/installer.iss ;;
+    # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
+    MINGW*|MSYS*|CYGWIN*) MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DMyAppVersion=$pkgver" packaging/installer.iss ;;
     *) echo "skipping the Windows installer: build it on Windows" >&2 ;;
   esac
 fi
