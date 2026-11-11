@@ -1,0 +1,20 @@
+# Generated build and release outputs
+dist/
+build/
+release/
+dist-pkg/
+*.spec.bak
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+node_modules/
+# Signing material: never commit private keys
+*-private.pem
+release-signing-private.pem
+packaging/keys/*private*
+*.exe
+*.deb
+*.bundle
+*.sig
+SHA256SUMS
