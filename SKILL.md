@@ -37,7 +37,7 @@ Use letters, digits, `.`, `_` and `-` only, with no spaces, starting with a lett
 **Q4. Artifacts, asked one at a time**
 Ask about each artifact separately. Only the ones the user says yes to are built. Record each answer as `true` or `false` under `targets` in `distribution.json`.
 - **Windows .exe** (`windows_exe`): a single PyInstaller executable. Pro: no install step, runs straight away. Con: no uninstaller or Start menu entry.
-- **Windows installer** (`windows_inno_installer`): an Inno Setup setup file built from `packaging/installer.iss`. Pro: Start menu entry, uninstaller and a standard install. Con: needs the .exe too, and the build runs on a Windows runner.
+- **Windows installer** (`windows_inno_installer`): an Inno Setup setup file built from `packaging/installer.iss`. Pro: Start menu entry, uninstaller and a standard install. Con: needs the .exe too, and the build runs on a Windows runner. Needs Inno Setup 6 (ISCC.exe): see "When the Windows installer is chosen" below.
 - **Linux .sh** (`linux_sh`): a self-extracting installer. Pro: runs on any distro. Con: a bit larger, since it bundles the app.
 - **Linux .deb** (`linux_deb`): a Debian or Ubuntu package. Pro: installs with apt or dpkg. Con: only for Debian-based systems.
 - **Docker image** (`docker`): a `Dockerfile` and `.dockerignore` for the project. Every pull request builds the image as a check. Every merge to main pushes it to GitHub Container Registry as `ghcr.io/<owner>/<repo>:<version>` and `:latest`, signs it with cosign (keyless), and adds `<app_name>-<version>-docker.txt` (the image digest) to the release. Pro: runs the same on any host with Docker, and suits servers. Con: the target needs Docker, the image is Linux amd64 only, and a new GHCR package starts private. Python and Mix projects get the Python file; Node projects get the Node file, which has a `spa` stage (nginx) and a `server` stage (`npm start`): keep the one that matches Q2 and delete the other.
@@ -54,6 +54,11 @@ Ask this before the signing question.
 - **Local** (`"build_location": "local"`): run `scripts/release_local.sh` (Linux or macOS) or `scripts/release_local.bat` (Windows, through Git Bash) on the user's machine. Pro: no CI setup and no minutes used, and you can test a build before publishing. Con: manual, and each OS builds only its own packages.
 
 When local is chosen, first check that git is installed (`git --version`). If it isn't, offer to install it and do not run a local release until it is. Also check `gh auth status`. Walk the user through `gh auth login` and `gh auth setup-git` if needed (the steps are in `distribution.md`). Then skip the Actions secret and the workflow steps, and tell the user to run the script on each OS they build for. Record the choice in `distribution.md`.
+
+**When the Windows installer is chosen** (`windows_inno_installer: true`), check that ISCC, the Inno Setup 6 compiler, will be there:
+- **GitHub builds:** nothing to install. The workflow runs `scripts/ensure_iscc.sh`, which installs Inno Setup with choco on the Windows runner when it is missing.
+- **Local builds on Windows:** run `bash scripts/ensure_iscc.sh --check` in Git Bash. If it reports ISCC missing, tell the user and offer to install it now with `bash scripts/ensure_iscc.sh` (winget, or choco when winget is not there). `release_local.sh` also runs this before it builds anything and installs Inno Setup if needed, so a release never fails halfway on a missing ISCC.
+- **Local builds on Linux or macOS:** Inno Setup does not run there. Tell the user the installer can be built only on Windows (`scripts\release_local.bat`) or on GitHub, and that the local run skips it.
 
 **Q5. Checksums and signing**
 SHA256SUMS is always written. Signing is required, and the user picks one of these two. Record the choice as `signing` in `distribution.json`.
@@ -80,7 +85,7 @@ After the answers are saved in `distribution.json`:
    - `.github/workflows/release.yml`, copied from `templates/release.yml`
    - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one, with `app_name` set to the project folder name. Set `app_name` to the Q0 answer, and the `targets` flags and the frontend keys from the answers.
    - `packaging/app.spec` and `packaging/installer.iss`, unless the project already has them
-   - `scripts/`: `checksums.sh`, `sign.sh`, `make_sh.sh`, `make_deb.sh`, `prune_releases.sh`, `install-linux.sh` and `uv-deploy.sh`. The workflow calls them.
+   - `scripts/`: `checksums.sh`, `sign.sh`, `make_sh.sh`, `make_deb.sh`, `prune_releases.sh`, `install-linux.sh`, `uv-deploy.sh` and `ensure_iscc.sh`. The workflow calls them.
    - `Dockerfile` and `.dockerignore`, only when `targets.docker` is true and the project has none yet: `templates/Dockerfile.python` for Python or Mix, `templates/Dockerfile.node` for Node. If `docker` was set to true after the first run, run `generate.sh` again; it keeps files that already exist.
    - `distribution.md` and the `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` pointers
 3. Write the answers and repo details into the project's `distribution.md` (copied from `templates/distribution.md`). Fill in every `<fill in>` cell: the answers, the repos, the secrets' status and the local folder. Never write a token or key value. Keep it current whenever an answer changes. It is the agent-neutral record, so a new agent from any provider can run the release cycle from it. A record with any `<fill in>` left is not finished.

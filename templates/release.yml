@@ -122,8 +122,8 @@ jobs:
         if: runner.os == 'Windows' && steps.targets.outputs.windows_inno_installer == 'true'
         shell: bash
         run: |
-          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
-          [ -f "$iscc" ] || choco install innosetup -y --no-progress
+          # Finds ISCC, or installs Inno Setup 6 (choco on the runner) when it is missing
+          iscc="$(bash scripts/ensure_iscc.sh)"
           mkdir -p release
           # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
           MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppName=$APP_NAME" "/DMyAppVersion=$PKGVER" packaging/installer.iss
