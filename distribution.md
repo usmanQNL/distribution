@@ -13,7 +13,7 @@ Written by `scripts/generate.sh`. Every file is listed so an agent can find it w
 - `packaging/app.spec`: PyInstaller spec. It reads `NAME` from `app_name` in `distribution.json`, so the build is `build/dist/<app_name>.exe` (Windows) or `build/dist/<app_name>` (Linux). `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root. PyInstaller writes to `build/dist/`, apart from a frontend's `dist/`.
 - `packaging/installer.iss`: Inno Setup script. Used only when `windows_inno_installer` is true. Its paths are relative to `packaging/`, so the exe is `..\build\dist\<app_name>.exe`. The workflow passes `MyAppName` (`app_name`) and `MyAppVersion`.
 - `scripts/checksums.sh`: writes `SHA256SUMS`.
-- `scripts/sign.sh`: signs with cosign or ed25519.
+- `scripts/sign.sh`: signs with cosign or ed25519. `sign.sh - check-key [public.pem]` only checks `RELEASE_SIGNING_KEY`; the workflow and `release_local.sh` run it before building.
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`: Linux `.sh` installer and `.deb` package.
 - `scripts/ensure_gh.sh`: finds the GitHub CLI (`gh`), which local releases publish with, and installs it when it is missing: winget or choco on Windows, brew on macOS, the official GitHub CLI apt repo on Debian and Ubuntu, or dnf, pacman or zypper. `release_local.sh` runs it first, then checks `gh auth status` and starts `gh auth login` in a terminal if you are not logged in (or set `GH_TOKEN`). `bash scripts/ensure_gh.sh --check` only looks.
 - `scripts/ensure_iscc.sh`: finds ISCC.exe, the Inno Setup 6 compiler, and installs Inno Setup when it is missing (winget, or choco; choco first on the GitHub runner). Used only when `windows_inno_installer` is true, by the workflow's installer step and by `release_local.sh` before it builds anything. `bash scripts/ensure_iscc.sh --check` only looks. Inno Setup runs only on Windows, so on Linux or macOS it explains that and exits.
@@ -74,6 +74,8 @@ Fill in every line. The setup agent writes these from the user's answers. Never 
 - Git and gh on the local machine (local only): <fill in: installed and logged in / not checked>
 
 ## Build location
+- For a full release (Windows .exe and installer, Linux .sh and .deb, and the Docker image) in one release, use `github`. A local run builds only the host OS's packages (Windows: .exe and installer; Linux: .sh and .deb; macOS: neither), never builds or pushes the Docker image, and publishes its own release, so runs on two OSes give two releases.
+- Where files go: only the Docker image goes to GHCR (`ghcr.io/<owner>/<repo>`, `:<version>` and `:latest`), only from `github` builds on a merge to main, signed with cosign (with ed25519, the signed `<app_name>-<version>-docker.txt` digest file covers it). A new GHCR package is private until made public in its package settings. The .exe, installer, .sh and .deb go to the releases repo as a GitHub Release with `SHA256SUMS` and signatures. Local runs never reach GHCR.
 - `github` (default): GitHub Actions builds, checksums, signs and publishes on every push to main. Artifacts pass between jobs and are kept by GitHub for the retention period.
 - `local`: nothing runs in Actions. On Windows the user runs `scripts\release_local.bat` (it calls the .sh through Git Bash). On Linux or macOS they run `scripts/release_local.sh`. Either one builds the selected artifacts, checksums and signs them (with cosign locally, only `SHA256SUMS` is signed, so one browser sign-in per run covers every artifact by checksum; `cosign-all` in the script signs each file instead), and publishes with `gh release create` to `releases_repo` in `distribution.json`. Needs: PyInstaller, `zip` (Node), `dpkg-deb` (.deb, Linux), Inno Setup 6 (installer, Windows; `release_local.sh` installs it with winget or choco when it is missing), cosign or openssl, and `gh` logged in (or `GH_TOKEN` set; `release_local.sh` installs `gh` when it is missing and starts the login when it is not logged in). Build only on the matching OS: `.exe` and Inno on Windows, `.sh` and `.deb` on Linux.
 - The releases repo fields: `releases_repo` in `distribution.json`, or the `RELEASES_REPO` env var for local runs.
@@ -109,7 +111,7 @@ openssl genpkey -algorithm ed25519 -out release-signing-private.pem
 mkdir -p packaging/keys
 openssl pkey -in release-signing-private.pem -pubout -out packaging/keys/release-signing-public.pem
 ```
-Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` secret, then keep or delete the local copy. Never commit it.
+Commit only the public key. Put the whole private file into the `RELEASE_SIGNING_KEY` secret (its contents, not a path), then keep or delete the local copy. Never commit it. For a local run, `export RELEASE_SIGNING_KEY=<path to the private file>` (or its contents). Both the workflow and `release_local.sh` check the key before building: `bash scripts/sign.sh - check-key packaging/keys/release-signing-public.pem` runs the same check (set, Ed25519, matches the public key).
 
 ## Verify a release
 - Checksums: `sha256sum -c SHA256SUMS`

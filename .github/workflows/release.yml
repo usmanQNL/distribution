@@ -54,6 +54,22 @@ jobs:
             # Package version for .deb, .sh and the installer: digits and dots only, grows with every release
             echo "pkgver=$major.${stamp/_/}"
           } >> "$GITHUB_OUTPUT"
+      # Ed25519 signing only: stop now, before any build, if the RELEASE_SIGNING_KEY secret is missing or wrong.
+      # Pull requests from forks get no secrets, so on pull requests a missing key is only a warning.
+      - name: Check RELEASE_SIGNING_KEY (ed25519 signing only)
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+          EVENT: ${{ github.event_name }}
+        shell: bash
+        run: |
+          mode=$(python3 -c "import json;print(json.load(open('distribution.json')).get('signing','cosign'))")
+          [ "$mode" = ed25519 ] || { echo "signing is $mode: no key to check"; exit 0; }
+          pub=""; [ -f packaging/keys/release-signing-public.pem ] && pub=packaging/keys/release-signing-public.pem
+          if [ -z "$RELEASE_SIGNING_KEY" ] && [ "$EVENT" = pull_request ]; then
+            echo "::warning::RELEASE_SIGNING_KEY is not set. Releases from main will fail until it is (Settings, Secrets and variables, Actions)."
+            exit 0
+          fi
+          bash scripts/sign.sh - check-key $pub || { echo "::error::RELEASE_SIGNING_KEY is missing or invalid: add the whole private key file as the repo secret RELEASE_SIGNING_KEY (Settings, Secrets and variables, Actions)"; exit 1; }
 
   build:
     needs: config
