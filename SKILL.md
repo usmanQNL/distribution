@@ -40,7 +40,7 @@ Default: only the Windows .exe is on. Each option is a separate choice, and the 
 **Q4b. Where do builds run?**
 Ask this before the signing question.
 - **GitHub** (default, `"build_location": "github"`): Actions builds, checksums, signs and publishes on every push to main. Pro: fully automatic, same machine every time, no local tools. Con: needs GitHub minutes and a secret for the releases repo. The Windows installer needs a Windows runner.
-- **Local** (`"build_location": "local"`): run `scripts/release_local.sh` on the user's machine. Pro: no CI setup and no minutes used, and you can test a build before publishing. Con: manual, and each OS builds only its own packages.
+- **Local** (`"build_location": "local"`): run `scripts/release_local.sh` (Linux or macOS) or `scripts/release_local.bat` (Windows, through Git Bash) on the user's machine. Pro: no CI setup and no minutes used, and you can test a build before publishing. Con: manual, and each OS builds only its own packages.
 
 When local is chosen, skip the Actions secret and the workflow steps, and tell the user to run the script on each OS they build for. Record the choice in `distribution.md`.
 
@@ -78,7 +78,7 @@ The `test/samples/` folder has a HelloWorld app for node, python-uv, flask, stre
 
 ## Step 3: Set up GitHub Actions for every merge
 
-Only for `build_location: github`. For local builds, skip this step and give the user the `scripts/release_local.sh` run instructions from `distribution.md`.
+Only for `build_location: github`. For local builds, skip this step and give the user the `scripts/release_local.bat` (Windows) or `scripts/release_local.sh` (Linux or macOS) run instructions from `distribution.md`.
 
 Walk the user through this, one step at a time. Wait for confirmation before the next step.
 

@@ -1,0 +1,21 @@
+@echo off
+REM Usage: scripts/release_local.bat  -> runs scripts\release_local.sh on Windows through Git Bash.
+REM Needs Git for Windows (provides bash), Python, PyInstaller, Inno Setup 6 (for the installer),
+REM and gh logged in (or GH_TOKEN set). cosign or openssl for signing, per distribution.json.
+setlocal
+
+set "BASH="
+if exist "%ProgramFiles%\Git\bin\bash.exe" set "BASH=%ProgramFiles%\Git\bin\bash.exe"
+if not defined BASH (
+  where bash >nul 2>nul && set "BASH=bash"
+)
+if not defined BASH (
+  echo Git Bash not found. Install Git for Windows from https://git-scm.com and run this again.
+  exit /b 1
+)
+
+pushd "%~dp0.."
+"%BASH%" scripts/release_local.sh %*
+set "RC=%ERRORLEVEL%"
+popd
+exit /b %RC%
