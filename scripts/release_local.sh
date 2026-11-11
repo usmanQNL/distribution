@@ -19,36 +19,50 @@ cfg() { python3 -c "import json,sys;d=json.load(open('distribution.json'));print
 flag() { [ "$(cfg "d['targets']['$1']")" = "True" ]; }
 signing="$(cfg "d.get('signing','cosign')")"
 releases="${RELEASES_REPO:-$(cfg "d.get('releases_repo','')")}"
-ver="v$(cat VERSION).$(date -u +%Y%m%d_%H%M)"
+bundle_frontend="$(cfg "d.get('bundle_frontend',False)")"
+frontend_dir="$(cfg "d.get('frontend_dir') or '.'")"
+frontend_dist="$(cfg "d.get('frontend_dist') or 'dist'")"
+major="$(tr -d '[:space:]' < VERSION)"; stamp="$(date -u +%Y%m%d_%H%M)"
+ver="v$major.$stamp"              # release tag, same scheme as the workflow
+pkgver="$major.${stamp/_/}"       # package version for .deb, .sh and the installer
 out="$root/release"; rm -rf "$out"; mkdir -p "$out"
 
-# 1. Node SPA
-if flag node_spa_zip && [ -f package.json ]; then
-  npm ci && npm run build && (cd dist && zip -qr "$out/frontend-$(uname -s | tr '[:upper:]' '[:lower:]').zip" .)
+# 1. Frontend first, so PyInstaller can bundle it (bundle_frontend) and the SPA zip can ship it
+if { flag node_spa_zip || [ "$bundle_frontend" = "True" ]; } && [ -f "$frontend_dir/package.json" ]; then
+  (cd "$frontend_dir" && npm ci && npm run build)
+  if flag node_spa_zip; then
+    (cd "$frontend_dir/$frontend_dist" && zip -qr "$out/frontend-$pkgver.zip" .)
+  fi
 fi
 
-# 2. PyInstaller (only when a packaged target is selected)
-if flag windows_exe || flag linux_sh || flag linux_deb; then
-  pyinstaller --noconfirm packaging/app.spec
+# 2. PyInstaller (only when a packaged target is selected). Output goes to build/dist, apart from the frontend's dist/.
+if flag windows_exe || flag windows_inno_installer || flag linux_sh || flag linux_deb; then
+  pyinstaller --noconfirm --distpath build/dist --workpath build/work packaging/app.spec
   case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) flag windows_exe && cp dist/app.exe "$out/" ;;
-    *) { flag linux_sh || flag linux_deb; } && cp dist/app "$out/" ;;
+    MINGW*|MSYS*|CYGWIN*) if flag windows_exe; then cp build/dist/app.exe "$out/"; fi ;;
   esac
 fi
 
-# 3. Linux installers (built from dist/)
-if [ "$(uname -s)" = "Linux" ]; then
-  src=dist; [ -d dist/app ] && src=dist/app
-  flag linux_sh && bash scripts/make_sh.sh "$src" "$out/app-$(cat VERSION)-linux.sh"
-  flag linux_deb && bash scripts/make_deb.sh "$src" app "$(cat VERSION)" "$out"
-  [ -f "$out/app" ] && { flag linux_sh || flag linux_deb; } && rm -f "$out/app"
+# 3. Linux installers (built from build/dist/)
+if [ "$(uname -s)" = "Linux" ] && { flag linux_sh || flag linux_deb; }; then
+  src=build/dist; [ -d build/dist/app ] && src=build/dist/app
+  if flag linux_sh; then bash scripts/make_sh.sh "$src" "$out/app-$pkgver-linux.sh"; fi
+  if flag linux_deb; then bash scripts/make_deb.sh "$src" app "$pkgver" "$out"; fi
   # Install script for Linux users, published alongside the installers
-  { flag linux_sh || flag linux_deb; } && cp "$root/scripts/install-linux.sh" "$out/install-linux.sh"
+  cp "$root/scripts/install-linux.sh" "$out/install-linux.sh"
 fi
 
-# 4. Windows Inno Setup (needs Inno Setup 6 installed; run on Windows)
+# 4. Windows Inno Setup (needs Inno Setup 6 installed; run on Windows). It writes straight into release/.
 if flag windows_inno_installer; then
-  "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" packaging/installer.iss && mv release/*-setup.exe "$out/" 2>/dev/null || true
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DMyAppVersion=$pkgver" packaging/installer.iss ;;
+    *) echo "skipping the Windows installer: build it on Windows" >&2 ;;
+  esac
+fi
+
+# 4b. uv deploy bundle: the source at this commit, with scripts/uv-deploy.sh inside
+if flag uv_deploy; then
+  git archive --format=tar.gz --prefix="app-$pkgver/" -o "$out/app-$pkgver-uv.tar.gz" HEAD
 fi
 
 # 5. Checksums, then signatures
@@ -67,5 +81,7 @@ esac
 
 # 6. Publish
 [ -n "$releases" ] || { echo "set releases_repo in distribution.json or RELEASES_REPO" >&2; exit 1; }
+# Two runs in the same minute would share a tag; keep the second one unique
+if gh release view "$ver" --repo "$releases" >/dev/null 2>&1; then ver="$ver.$(date -u +%S)"; fi
 gh release create "$ver" "$out"/* --repo "$releases" --title "$ver" --notes "Released locally from $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "published $ver to $releases"

@@ -3,12 +3,15 @@
   "entry": "test/samples/flask/app.py",
   "targets": {
     "windows_exe": true,
-    "windows_inno_installer": false,
+    "windows_inno_installer": true,
     "linux_sh": true,
-    "linux_deb": false,
+    "linux_deb": true,
     "node_spa_zip": false,
-    "uv_deploy": false
+    "uv_deploy": true
   },
+  "bundle_frontend": false,
+  "frontend_dir": ".",
+  "frontend_dist": "dist",
   "signing": "cosign",
   "artifact_retention_days": 7,
   "build_location": "github",

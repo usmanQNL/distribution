@@ -9,6 +9,9 @@
     "node_spa_zip": false,
     "uv_deploy": false
   },
+  "bundle_frontend": false,
+  "frontend_dir": ".",
+  "frontend_dist": "dist",
   "signing": "cosign",
   "artifact_retention_days": 7,
   "build_location": "github",

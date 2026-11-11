@@ -1,7 +1,11 @@
 name: release
 
+# Pull requests run the build only, so branch protection can require it before merge.
+# Pushes to main (and manual runs) also checksum, sign and publish.
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -13,23 +17,35 @@ on:
 permissions:
   contents: read
 
+# One run at a time per branch, in order. GitHub keeps only one waiting run per group, so a burst of
+# merges can collapse into one release; that release is built from the newest commit and includes them all.
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      location: ${{ steps.loc.outputs.location }}
+      location: ${{ steps.cfg.outputs.location }}
+      tag: ${{ steps.cfg.outputs.tag }}
+      pkgver: ${{ steps.cfg.outputs.pkgver }}
     steps:
       - uses: actions/checkout@v5
-      - name: Read build location
-        id: loc
+      - name: Read build location and set the version once for every job
+        id: cfg
         shell: bash
         run: |
           loc=$(python3 -c "import json;print(json.load(open('distribution.json')).get('build_location','github'))")
-          echo "location=$loc" >> "$GITHUB_OUTPUT"
+          major="$(tr -d '[:space:]' < VERSION)"
+          stamp="$(date -u +%Y%m%d_%H%M)"
+          {
+            echo "location=$loc"
+            # Release tag: v<VERSION>.<yyyymmdd_hhmm> in UTC
+            echo "tag=v$major.$stamp"
+            # Package version for .deb, .sh and the installer: digits and dots only, grows with every release
+            echo "pkgver=$major.${stamp/_/}"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     needs: config
@@ -38,13 +54,16 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      PKGVER: ${{ needs.config.outputs.pkgver }}
     steps:
       - uses: actions/checkout@v5
-      - name: Read selected targets
+      - name: Read selected targets and frontend settings
         id: targets
         shell: bash
         run: |
           python3 -c "import json;t=json.load(open('distribution.json'))['targets'];[print(f'{k}={str(v).lower()}') for k,v in t.items()]" >> "$GITHUB_OUTPUT"
+          python3 -c "import json;d=json.load(open('distribution.json'));print('bundle_frontend='+str(d.get('bundle_frontend',False)).lower());print('frontend_dir='+(d.get('frontend_dir') or '.'));print('frontend_dist='+(d.get('frontend_dist') or 'dist'))" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
@@ -53,50 +72,68 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt pyinstaller
         shell: bash
-      - name: Node SPA build (if selected and package.json has a build script)
-        if: steps.targets.outputs.node_spa_zip == 'true'
+      # The frontend is built first, so PyInstaller can bundle it (bundle_frontend) and the SPA zip can ship it.
+      - name: Frontend build (if node_spa_zip or bundle_frontend, and package.json has a build script)
+        if: steps.targets.outputs.node_spa_zip == 'true' || steps.targets.outputs.bundle_frontend == 'true'
         shell: bash
+        working-directory: ${{ steps.targets.outputs.frontend_dir }}
         run: |
           if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)"; then
             npm ci && npm run build
-            mkdir -p release && (cd dist && zip -r ../release/frontend-${{ matrix.os }}.zip .)
+          else
+            echo "::warning::no package.json with a build script in ${{ steps.targets.outputs.frontend_dir }}"
           fi
+      - name: SPA zip (Linux runner only, one copy per release)
+        if: runner.os == 'Linux' && steps.targets.outputs.node_spa_zip == 'true'
+        shell: bash
+        run: |
+          src="${{ steps.targets.outputs.frontend_dir }}/${{ steps.targets.outputs.frontend_dist }}"
+          [ -d "$src" ] || { echo "::error::frontend output $src not found"; exit 1; }
+          mkdir -p release && (cd "$src" && zip -qr "$GITHUB_WORKSPACE/release/frontend-$PKGVER.zip" .)
+      # PyInstaller writes to build/dist, so it never mixes with a frontend build in dist/.
       - name: PyInstaller build (if selected and packaging/app.spec exists)
         if: steps.targets.outputs.windows_exe == 'true' || steps.targets.outputs.windows_inno_installer == 'true' || steps.targets.outputs.linux_sh == 'true' || steps.targets.outputs.linux_deb == 'true'
         shell: bash
         run: |
-          if [ -f packaging/app.spec ]; then pyinstaller --noconfirm packaging/app.spec
+          if [ -f packaging/app.spec ]; then
+            pyinstaller --noconfirm --distpath build/dist --workpath build/work packaging/app.spec
             mkdir -p release
-            if [ "$RUNNER_OS" = "Windows" ] && [ "${{ steps.targets.outputs.windows_exe }}" = "true" ]; then cp dist/app.exe release/; fi
-            if [ "$RUNNER_OS" = "Linux" ] && { [ "${{ steps.targets.outputs.linux_sh }}" = "true" ] || [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; }; then cp dist/app release/; fi
+            if [ "$RUNNER_OS" = "Windows" ] && [ "${{ steps.targets.outputs.windows_exe }}" = "true" ]; then cp build/dist/app.exe release/; fi
           fi
       - name: Linux packages (.sh and .deb, if selected)
         if: runner.os == 'Linux' && (steps.targets.outputs.linux_sh == 'true' || steps.targets.outputs.linux_deb == 'true')
         shell: bash
         run: |
-          VER="$(cat VERSION)"
-          if [ -d dist/app ]; then SRC=dist/app; elif [ -d dist ]; then SRC=dist; else exit 0; fi
-          mkdir -p release && bash scripts/make_sh.sh "$SRC" "release/app-$VER-linux.sh"
+          if [ -d build/dist/app ]; then SRC=build/dist/app; elif [ -f build/dist/app ]; then SRC=build/dist; else echo "::error::no PyInstaller output in build/dist"; exit 1; fi
+          mkdir -p release
+          if [ "${{ steps.targets.outputs.linux_sh }}" = "true" ]; then bash scripts/make_sh.sh "$SRC" "release/app-$PKGVER-linux.sh"; fi
+          if [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then bash scripts/make_deb.sh "$SRC" app "$PKGVER" release; fi
           cp scripts/install-linux.sh release/install-linux.sh
-          if [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then bash scripts/make_deb.sh "$SRC" app "$VER" release; fi
-          # The .sh and .deb already contain the Linux binary, so drop the raw copy from the release
-          if [ "${{ steps.targets.outputs.linux_sh }}" = "true" ] || [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then rm -f release/app; fi
       - name: Inno Setup installer (Windows, if selected)
         if: runner.os == 'Windows' && steps.targets.outputs.windows_inno_installer == 'true'
         shell: bash
         run: |
-          choco install innosetup -y --no-progress
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          [ -f "$iscc" ] || choco install innosetup -y --no-progress
           mkdir -p release
-          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DMyAppVersion=$(cat VERSION)" packaging/installer.iss
+          "$iscc" "/DMyAppVersion=$PKGVER" packaging/installer.iss
+          ls release/*-setup.exe
+      - name: uv deploy bundle (Linux runner only, if selected)
+        if: runner.os == 'Linux' && steps.targets.outputs.uv_deploy == 'true'
+        shell: bash
+        run: |
+          mkdir -p release
+          git archive --format=tar.gz --prefix="app-$PKGVER/" -o "release/app-$PKGVER-uv.tar.gz" HEAD
       - uses: actions/upload-artifact@v5
         with:
           name: release-${{ matrix.os }}
           path: release/*
+          if-no-files-found: ignore
           retention-days: 7
 
   publish:
     needs: [config, build]
-    if: needs.config.outputs.location == 'github'
+    if: needs.config.outputs.location == 'github' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -108,6 +145,10 @@ jobs:
         with:
           path: release
           merge-multiple: true
+      - name: Check there is something to publish
+        shell: bash
+        run: |
+          [ -n "$(ls -A release 2>/dev/null)" ] || { echo "::error::no artifacts were built; check the targets in distribution.json"; exit 1; }
       - name: Checksums
         run: bash scripts/checksums.sh release
       - name: Read signing mode
@@ -129,9 +170,21 @@ jobs:
       - name: Publish to releases repo
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          TAG: ${{ needs.config.outputs.tag }}
+          REPO: ${{ vars.RELEASES_REPO || format('{0}-releases', github.repository) }}
+        shell: bash
         run: |
-          VERSION="v$(cat VERSION).$(date -u +%Y%m%d_%H%M)"
-          gh release create "$VERSION" release/* --repo "${{ vars.RELEASES_REPO || format('{0}-releases', github.repository) }}" --title "$VERSION" --notes "Automated release from ${{ github.sha }}"
+          # Two runs in the same minute would share a tag; keep the second one unique.
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then TAG="$TAG.r$GITHUB_RUN_NUMBER"; fi
+          gh release create "$TAG" release/* --repo "$REPO" --title "$TAG" --notes "Automated release from $GITHUB_SHA"
+      # The release now holds the files, so the copies in Actions storage are no longer needed.
+      - name: Delete build artifacts after a successful publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --paginate --jq '.artifacts[] | select(.name | startswith("release-")) | .id')
+          for id in $ids; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done
 
   prune:
     if: github.event_name == 'workflow_dispatch' && inputs.prune_releases
@@ -146,11 +199,3 @@ jobs:
           days=$(python3 -c "import json;print(json.load(open('distribution.json')).get('artifact_retention_days',7))")
           repo="${{ vars.RELEASES_REPO || format('{0}-releases', github.repository) }}"
           bash scripts/prune_releases.sh "$repo" "$days"
-      - name: Delete build artifacts after a successful publish
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --paginate --jq '.artifacts[] | select(.name | startswith("release-")) | .id')
-          for id in $ids; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done
