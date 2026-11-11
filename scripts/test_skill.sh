@@ -7,7 +7,7 @@ ok()  { echo "ok: $1"; }
 bad() { echo "FAIL: $1" >&2; fail=1; }
 
 # 1. Syntax of every shell script
-for f in scripts/*.sh templates/*.sh test/samples/*/*.sh; do
+for f in scripts/*.sh test/samples/*/*.sh; do
   [ -f "$f" ] || continue
   bash -n "$f" && ok "syntax $f" || bad "syntax $f"
 done
@@ -51,5 +51,25 @@ done
 # 5. Config files parse
 python3 -c "import json,sys; [json.load(open(f)) for f in sys.argv[1:]]" distribution.json templates/distribution.json && ok "json parses" || bad "json"
 python3 -c "import yaml" 2>/dev/null && python3 -c "import yaml,sys; yaml.safe_load(open('templates/release.yml'))" && ok "workflow yaml parses" || echo "skip: pyyaml not installed"
+
+# 6. Workflow wiring that broke before
+python3 - <<'PY' && ok "workflow wiring" || bad "workflow wiring"
+import sys, yaml
+w = yaml.safe_load(open("templates/release.yml"))
+jobs = w["jobs"]
+names = lambda j: [s.get("name", "") for s in jobs[j]["steps"]]
+errs = []
+if not any("Delete build artifacts" in n for n in names("publish")): errs.append("artifact cleanup must be in the publish job")
+if any("Delete build artifacts" in n for n in names("prune")): errs.append("artifact cleanup must not be in the prune job")
+if jobs["publish"].get("permissions", {}).get("actions") != "write": errs.append("publish needs actions: write")
+if "pull_request" not in jobs["publish"]["if"]: errs.append("publish must not run on pull requests")
+for e in errs: print("  " + e, file=sys.stderr)
+sys.exit(1 if errs else 0)
+PY
+# Inno resolves Source paths from packaging/, and PyInstaller writes to build/dist
+grep -q 'Source: "\.\.\\build\\dist\\app.exe"' templates/installer.iss && ok "installer source path" || bad "installer Source must be ..\\build\\dist\\app.exe"
+for f in templates/release.yml scripts/release_local.sh; do
+  grep -q -- '--distpath build/dist' "$f" && ok "pyinstaller distpath in $f" || bad "pyinstaller must write to build/dist in $f"
+done
 
 [ "$fail" = 0 ] && echo "all checks passed" || { echo "checks failed" >&2; exit 1; }

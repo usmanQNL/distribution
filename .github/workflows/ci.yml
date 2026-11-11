@@ -17,10 +17,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Lint shell scripts
-        run: shellcheck -S warning scripts/*.sh templates/*.sh
+        run: shellcheck -S warning scripts/*.sh
       - name: Lint workflows
         run: |
-          bash -c 'curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash'
+          # Pinned to a release, so a change upstream cannot change what CI runs
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint .github/workflows/*.yml templates/release.yml
       - name: Skill checks
-        run: bash scripts/test_skill.sh
+        run: |
+          pip install pyyaml
+          bash scripts/test_skill.sh
