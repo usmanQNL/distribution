@@ -82,14 +82,16 @@ SHA256SUMS is always written. Signing is required, and the user picks one of the
 
 After the answers are saved in `distribution.json`:
 
-1. Run `scripts/detect.sh <project-dir>` to confirm the language and Python framework. It prints `language=` (node, python, mix) and `python_framework=` (flask, fastapi, streamlit or none).
+1. Run `scripts/detect.sh <project-dir>` to confirm the language and Python framework. It prints `language=` (node, python, mix), `python_framework=` (flask, fastapi, streamlit or none) and `uses_env=` (yes when the app reads a `.env` file). When `uses_env=yes`, tell the user that every release will ship a settings template, `<app_name>-<version>-env.example`, and say where `.env` goes for each artifact they chose (the table in `distribution.md`, "Settings file (.env)"). No question is needed.
 2. Run `scripts/generate.sh <project-dir>` to write:
    - `.github/workflows/release.yml`, copied from `templates/release.yml`
    - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one, with `app_name` set to the project folder name. Set `app_name` to the Q0 answer, and the `targets` flags and the frontend keys from the answers.
    - `packaging/app.spec` and `packaging/installer.iss`, unless the project already has them
-   - `scripts/`: `checksums.sh`, `sign.sh`, `make_sh.sh`, `make_deb.sh`, `prune_releases.sh`, `install-linux.sh`, `uv-deploy.sh`, `ensure_iscc.sh` and `ensure_gh.sh`. The workflow calls them.
+   - `scripts/`: `checksums.sh`, `sign.sh`, `env_example.sh`, `make_sh.sh`, `make_deb.sh`, `prune_releases.sh`, `install-linux.sh`, `uv-deploy.sh`, `ensure_iscc.sh` and `ensure_gh.sh`. The workflow calls them.
    - `Dockerfile` and `.dockerignore`, only when `targets.docker` is true and the project has none yet: `templates/Dockerfile.python` for Python or Mix, `templates/Dockerfile.node` for Node. If `docker` was set to true after the first run, run `generate.sh` again; it keeps files that already exist.
    - `distribution.md` and the `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` pointers
+   - `packaging/env_hook.py`, the PyInstaller runtime hook that loads the `.env` next to the built program (a frozen `load_dotenv()` looks only in the current folder). `templates/app.spec` lists it in `HOOKS`; a project that already had a spec needs that line added.
+   - `.env.example`, only when the app reads a `.env` and the project has a `.env` but no template: a copy with every value removed. Have the user check it and commit it. `generate.sh` also adds `.env` to `.gitignore`, and warns if `.env` is already committed (then tell the user to remove it and rotate its secrets). If the app reads a `.env` but has neither file, write `.env.example` yourself with the variable names the code reads and no values. Never ship or commit the real `.env`.
 3. Write the answers and repo details into the project's `distribution.md` (copied from `templates/distribution.md`). Fill in every `<fill in>` cell: the answers, the repos, the secrets' status and the local folder. Never write a token or key value. Keep it current whenever an answer changes. It is the agent-neutral record, so a new agent from any provider can run the release cycle from it. A record with any `<fill in>` left is not finished.
 4. Tell the user which files were written and what to commit. The user commits and pushes; this skill does not push.
 
@@ -138,4 +140,5 @@ Local checks, when possible: `pyinstaller --noconfirm --distpath build/dist --wo
 - Keep each script small. Automate the rest.
 - On Windows, run the skill's `.sh` scripts with Git's own `bash.exe` (in the `bin` folder of the Git install that `where git` points to), or from a Git Bash window. Never call a bare `bash` from cmd or PowerShell: it is often WSL's bash from `Windows\System32`, which runs in Linux and cannot see Windows tools such as ISCC or winget.
 - Never write secrets into the repo. Use GitHub Actions secrets such as `RELEASES_REPO_TOKEN`.
+- Never ship or commit a real `.env`. Releases ship only `.env.example` (values removed).
 - Never include a model name in generated commit messages or artifacts.

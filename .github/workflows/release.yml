@@ -89,6 +89,16 @@ jobs:
         run: |
           python3 -c "import json;t=json.load(open('distribution.json'))['targets'];[print(f'{k}={str(v).lower()}') for k,v in t.items()]" >> "$GITHUB_OUTPUT"
           python3 -c "import json;d=json.load(open('distribution.json'));print('bundle_frontend='+str(d.get('bundle_frontend',False)).lower());print('frontend_dir='+(d.get('frontend_dir') or '.'));print('frontend_dist='+(d.get('frontend_dist') or 'dist'))" >> "$GITHUB_OUTPUT"
+      # Settings template: the project's .env.example, or its .env with every value removed. The real .env is never shipped.
+      # Every runner writes it to build/env (the installer and the Linux packages put it next to the program);
+      # the Linux runner also adds it to the release once, as <app_name>-<version>-env.example.
+      - name: Settings template (.env.example, if the project has one)
+        shell: bash
+        run: |
+          bash scripts/env_example.sh . build/env/.env.example
+          if [ "$RUNNER_OS" = Linux ] && [ -f build/env/.env.example ]; then
+            mkdir -p release && cp build/env/.env.example "release/$APP_NAME-$PKGVER-env.example"
+          fi
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
@@ -131,6 +141,7 @@ jobs:
         run: |
           if [ -d "build/dist/$APP_NAME" ]; then SRC="build/dist/$APP_NAME"; elif [ -f "build/dist/$APP_NAME" ]; then SRC=build/dist; else echo "::error::no PyInstaller output in build/dist"; exit 1; fi
           mkdir -p release
+          if [ -f build/env/.env.example ]; then cp build/env/.env.example "$SRC/.env.example"; fi
           if [ "${{ steps.targets.outputs.linux_sh }}" = "true" ]; then bash scripts/make_sh.sh "$SRC" "release/$APP_NAME-$PKGVER-linux.sh" "$APP_NAME"; fi
           if [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then bash scripts/make_deb.sh "$SRC" "$APP_NAME" "$PKGVER" release; fi
           sed "s/^APP=app\$/APP=$APP_NAME/" scripts/install-linux.sh > "release/$APP_NAME-$PKGVER-linux-install.sh"
@@ -246,7 +257,8 @@ jobs:
       - name: Check there is something to publish
         shell: bash
         run: |
-          [ -n "$(ls -A release 2>/dev/null)" ] || { echo "::error::no artifacts were built; check the targets in distribution.json"; exit 1; }
+          # The settings template alone is not a release
+          [ -n "$(find release -maxdepth 1 -type f ! -name '*-env.example' -print -quit 2>/dev/null)" ] || { echo "::error::no artifacts were built; check the targets in distribution.json"; exit 1; }
       - name: Checksums
         run: bash scripts/checksums.sh release
       - name: Read signing mode
@@ -274,7 +286,9 @@ jobs:
         run: |
           # Two runs in the same minute would share a tag; keep the second one unique.
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then TAG="$TAG.r$GITHUB_RUN_NUMBER"; fi
-          gh release create "$TAG" release/* --repo "$REPO" --title "$TAG" --notes "Automated release from $GITHUB_SHA"
+          # The notes say where .env goes when the release ships <app_name>-<version>-env.example
+          { echo "Automated release from $GITHUB_SHA"; bash scripts/env_example.sh --notes release; } > notes.md
+          gh release create "$TAG" release/* --repo "$REPO" --title "$TAG" --notes-file notes.md
       # The release now holds the files, so the copies in Actions storage are no longer needed.
       - name: Delete build artifacts after a successful publish
         env:

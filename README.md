@@ -11,6 +11,7 @@ A shareable Claude skill that sets up release builds for a Python, Node or mixed
 - A Docker image, if the user asks for one: the skill writes a `Dockerfile` and `.dockerignore`, every pull request builds the image, and every merge pushes it to GitHub Container Registry (`ghcr.io/<owner>/<repo>:<version>` and `:latest`), signed with cosign, with its digest in the release as `<name>-<version>-docker.txt`
 - Every file named `<name>-<version>-<platform>`, where `<name>` is the release name the user picks at setup (the project name by default), for example `acme-notes-1.202611110638-windows.exe`
 - `SHA256SUMS` plus a signature for each file (cosign with certificate, or Ed25519)
+- A settings template, `<name>-<version>-env.example`, when the app reads a `.env` file (see below)
 
 Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-deploy.sh`, shipped in a source bundle).
 
@@ -27,6 +28,23 @@ Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-depl
 **Where each file goes.** Only the Docker image goes to GitHub Container Registry (GHCR), and only with GitHub (Actions) builds. On every merge to main the workflow pushes it to `ghcr.io/<owner>/<repo>` (`:<version>` and `:latest`), signs it with cosign (with Ed25519 signing, the signed digest file below vouches for it instead), and adds `<name>-<version>-docker.txt` with the image digest to the release. Pull requests only build the image. A new GHCR package starts out private: to let anyone pull it, open the package, Package settings, Change visibility, Public. The Windows and Linux files (.exe, installer, .sh, .deb) are not container images, so they go to the releases repo as a GitHub Release, with `SHA256SUMS` and signatures. A local run never builds Docker, so nothing from it reaches GHCR.
 
 For local releases (`scripts/release_local.sh`, or `scripts\release_local.bat` on Windows), the script first checks for the GitHub CLI (`gh`) and installs it if it is missing (winget or choco on Windows, brew on macOS, the official apt repo or dnf, pacman or zypper on Linux). It then checks that `gh` is logged in and starts `gh auth login` if it is not (or set `GH_TOKEN`). When the Windows installer is chosen it does the same for Inno Setup.
+
+### Apps that read a .env file
+
+`scripts/detect.sh` reports `uses_env=yes` when the app has a `.env` or `.env.example`, depends on `python-dotenv` or `dotenv`, or calls `load_dotenv`. Every release then ships a settings template, `<name>-<version>-env.example`, checksummed and signed like the other files, and puts `.env.example` next to the program inside the Windows installer, the Linux `.sh` and the `.deb`. The template is the project's own `.env.example`. If the project has only a `.env`, `generate.sh` writes `.env.example` from it with every value removed (names only) for you to check and commit, and adds `.env` to `.gitignore`. The real `.env` is never shipped.
+
+Where users put `.env` (copy the template, rename it to `.env`, fill it in):
+
+| Release file | Where `.env` goes |
+|---|---|
+| Windows `.exe` | The same folder as the `.exe` |
+| Windows installer | The install folder, by default `C:\Program Files\<name>` (editing it there needs administrator rights) |
+| Linux `.sh` | `~/.local/share/<name>/.env`, or `/opt/<name>/.env` after a `--system` install |
+| Linux `.deb` | `/opt/<name>/.env` (needs sudo) |
+| uv bundle | The extracted folder, next to `pyproject.toml` |
+| Docker | Not in the image: `docker run --env-file .env ...`, or mount it at `/app/.env` |
+
+These locations work wherever the program is started from (a shortcut, the Start menu, a command on `PATH`): the PyInstaller build includes a small runtime hook, `packaging/env_hook.py`, that loads the `.env` next to the executable. Without it, a built app's `load_dotenv()` looks only in the current folder. Variables already set in the environment win over the file. Each release's notes list the locations for the files in that release.
 
 ### Ed25519 signing: set RELEASE_SIGNING_KEY
 
@@ -49,6 +67,7 @@ Keep `root-private.pem` outside the repo. `.gitignore` already ignores `*-privat
 - `templates/app.spec`, `templates/installer.iss`: PyInstaller spec (with placeholders for entry point and frontend) and Inno Setup script, both named from `app_name`
 - `scripts/detect.sh`, `scripts/generate.sh`: detect the project and copy the templates
 - `scripts/checksums.sh`, `scripts/sign.sh`: SHA256SUMS and cosign signing
+- `scripts/env_example.sh`, `templates/env_hook.py`: the `.env.example` that releases ship, and the PyInstaller hook that loads `.env` from next to the program
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`, `scripts/install-linux.sh`: Linux installer, package and install helper
 - `scripts/uv-deploy.sh`: uv-based run script for targets without PyInstaller
 - `scripts/prune_releases.sh`: opt-in deletion of old releases
@@ -63,7 +82,7 @@ Keep `root-private.pem` outside the repo. `.gitignore` already ignores `*-privat
 
 ## Status
 
-`scripts/test_skill.sh` runs in CI on every pull request, with shellcheck and actionlint. This repo also runs its own release workflow on the Flask sample: every pull request builds the Windows exe and installer, the Linux .sh and .deb, the uv bundle and the Docker image, and every merge to main publishes them, signed with cosign, to `usmanQNL/distribution-test` (the image goes to `ghcr.io/usmanqnl/distribution`). CI also builds the Dockerfile templates against the sample apps.
+`scripts/test_skill.sh` runs in CI on every pull request, with shellcheck and actionlint. This repo also runs its own release workflow on the Flask sample: every pull request builds the Windows exe and installer, the Linux .sh and .deb, the uv bundle, the Docker image and the settings template (the sample reads `GREETING` from `.env`), and every merge to main publishes them, signed with cosign, to `usmanQNL/distribution-test` (the image goes to `ghcr.io/usmanqnl/distribution`). CI also builds the Dockerfile templates against the sample apps.
 
 ## License
 

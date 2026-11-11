@@ -55,6 +55,12 @@ if [ "$(cfg "d['targets'].get('docker',False)")" = "True" ]; then
   echo "note: the Docker image is built and pushed to GHCR only by the GitHub workflow; locally, run: docker build -t ${name,,}:$pkgver ." >&2
 fi
 
+# 0. Settings template: the project's .env.example, or its .env with every value removed (never the real .env).
+#    It goes in the release as <app_name>-<version>-env.example, and next to the program in the installer and Linux packages.
+rm -rf build/env
+bash scripts/env_example.sh . build/env/.env.example
+if [ -f build/env/.env.example ]; then cp build/env/.env.example "$out/$name-$pkgver-env.example"; fi
+
 # 1. Frontend first, so PyInstaller can bundle it (bundle_frontend) and the SPA zip can ship it
 if { flag node_spa_zip || [ "$bundle_frontend" = "True" ]; } && [ -f "$frontend_dir/package.json" ]; then
   (cd "$frontend_dir" && npm ci && npm run build)
@@ -74,6 +80,7 @@ fi
 # 3. Linux installers (built from build/dist/)
 if [ "$(uname -s)" = "Linux" ] && { flag linux_sh || flag linux_deb; }; then
   src=build/dist; [ -d "build/dist/$name" ] && src="build/dist/$name"
+  if [ -f build/env/.env.example ]; then cp build/env/.env.example "$src/.env.example"; fi
   if flag linux_sh; then bash scripts/make_sh.sh "$src" "$out/$name-$pkgver-linux.sh" "$name"; fi
   if flag linux_deb; then bash scripts/make_deb.sh "$src" "$name" "$pkgver" "$out"; fi
   # Install script for Linux users, published alongside the installers
@@ -92,7 +99,7 @@ if flag uv_deploy; then
 fi
 
 # 5. Checksums, then signatures
-[ -n "$(ls -A "$out")" ] || { echo "nothing selected to build" >&2; exit 1; }
+[ -n "$(find "$out" -maxdepth 1 -type f ! -name '*-env.example' -print -quit)" ] || { echo "nothing selected to build" >&2; exit 1; }
 bash scripts/checksums.sh "$out"
 case "$signing" in
   cosign) bash scripts/sign.sh "$out" cosign-sums ;;  # one browser sign-in per run
@@ -109,5 +116,6 @@ esac
 [ -n "$releases" ] || { echo "set releases_repo in distribution.json or RELEASES_REPO" >&2; exit 1; }
 # Two runs in the same minute would share a tag; keep the second one unique
 if gh release view "$ver" --repo "$releases" >/dev/null 2>&1; then ver="$ver.$(date -u +%S)"; fi
-gh release create "$ver" "$out"/* --repo "$releases" --title "$ver" --notes "Released locally from $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+notes="$(echo "Released locally from $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; bash scripts/env_example.sh --notes "$out")"
+gh release create "$ver" "$out"/* --repo "$releases" --title "$ver" --notes "$notes"
 echo "published $ver to $releases"

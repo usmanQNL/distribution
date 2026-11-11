@@ -19,3 +19,5 @@ packaging/keys/*private*
 *.bundle
 *.sig
 SHA256SUMS
+# Settings: ship .env.example, never the real .env
+.env
