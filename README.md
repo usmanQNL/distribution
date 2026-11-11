@@ -6,10 +6,11 @@ A shareable Claude skill that sets up release builds for a Python, Node or mixed
 
 - Windows `.exe` (PyInstaller)
 - Linux `.sh` self-extracting installer and `.deb` package (built on Ubuntu runners)
-- A zipped SPA (`frontend-<os>.zip`) when the Node project has a `build` script
+- A zipped SPA (`frontend-<version>.zip`) when the Node project has a `build` script
+- A Windows installer (Inno Setup)
 - `SHA256SUMS` plus a signature for each file (cosign with certificate, or Ed25519)
 
-Python projects can also deploy with uv instead of PyInstaller (`templates/uv-deploy.sh`).
+Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-deploy.sh`, shipped in a source bundle).
 
 ## How to use
 
@@ -26,12 +27,16 @@ Python projects can also deploy with uv instead of PyInstaller (`templates/uv-de
 - `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to the guide
 - `templates/release.yml`: the GitHub Actions workflow
 - `templates/app.spec`: PyInstaller spec, with placeholders for entry point and frontend
-- `templates/uv-deploy.sh`: uv-based run script for targets without PyInstaller
+- `templates/app.spec`, `templates/installer.iss`: PyInstaller spec and Inno Setup script
 - `scripts/detect.sh`, `scripts/generate.sh`: detect the project and copy the templates
 - `scripts/checksums.sh`, `scripts/sign.sh`: SHA256SUMS and cosign signing
-- `scripts/make_sh.sh`, `scripts/make_deb.sh`: Linux installer and package
+- `scripts/make_sh.sh`, `scripts/make_deb.sh`, `scripts/install-linux.sh`: Linux installer, package and install helper
+- `scripts/uv-deploy.sh`: uv-based run script for targets without PyInstaller
+- `scripts/prune_releases.sh`: opt-in deletion of old releases
+- `scripts/release_local.sh`, `scripts/release_local.bat`: local builds
+- `scripts/test_skill.sh`: the skill's own checks, run in CI
 - `test/samples/`: HelloWorld apps for node, python-uv, flask, streamlit and fastapi
 
 ## Status
 
-Scripts are tested locally where the host allows: detection on all samples, the Node build, checksums, the .sh installer and the spec syntax. The PyInstaller build, the .deb build, cosign signing and the release publish run only in GitHub Actions, so they still need a real CI run.
+`scripts/test_skill.sh` runs in CI on every pull request, with shellcheck and actionlint. This repo also runs its own release workflow on the Flask sample: every pull request builds the Windows exe and installer, the Linux .sh and .deb and the uv bundle, and every merge to main publishes them, signed with cosign, to `usmanQNL/distribution-test`.
