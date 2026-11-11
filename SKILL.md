@@ -32,8 +32,10 @@ Ask about each artifact separately. Only the ones the user says yes to are built
 - **Windows installer** (`windows_inno_installer`): an Inno Setup setup file built from `packaging/installer.iss`. Pro: Start menu entry, uninstaller and a standard install. Con: needs the .exe too, and the build runs on a Windows runner.
 - **Linux .sh** (`linux_sh`): a self-extracting installer. Pro: runs on any distro. Con: a bit larger, since it bundles the app.
 - **Linux .deb** (`linux_deb`): a Debian or Ubuntu package. Pro: installs with apt or dpkg. Con: only for Debian-based systems.
-- **Node SPA zip** (`node_spa_zip`): the `npm run build` output zipped, once per release (`frontend-<version>.zip`). Pro: small and simple. Con: needs a server to serve it.
+- **Node SPA zip** (`node_spa_zip`): the `npm run build` output zipped, once per release (`app-<version>-frontend.zip`). Pro: small and simple. Con: needs a server to serve it.
 - **uv deploy** (`uv_deploy`): no binary, the target runs the app with uv. The release gets `app-<version>-uv.tar.gz`, the source at that commit with `scripts/uv-deploy.sh` inside. Pro: no build step. Con: the target needs Python and uv, and the project needs a `pyproject.toml`.
+
+Every release file is named `app-<version>-<platform>[-<kind>].<ext>` (the list is in `distribution.md`, "Release file names").
 
 Default: only the Windows .exe is on. Each option is a separate choice, and the workflow builds only the ones marked `true`.
 

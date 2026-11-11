@@ -89,7 +89,7 @@ jobs:
         run: |
           src="${{ steps.targets.outputs.frontend_dir }}/${{ steps.targets.outputs.frontend_dist }}"
           [ -d "$src" ] || { echo "::error::frontend output $src not found"; exit 1; }
-          mkdir -p release && (cd "$src" && zip -qr "$GITHUB_WORKSPACE/release/frontend-$PKGVER.zip" .)
+          mkdir -p release && (cd "$src" && zip -qr "$GITHUB_WORKSPACE/release/app-$PKGVER-frontend.zip" .)
       # PyInstaller writes to build/dist, so it never mixes with a frontend build in dist/.
       - name: PyInstaller build (if selected and packaging/app.spec exists)
         if: steps.targets.outputs.windows_exe == 'true' || steps.targets.outputs.windows_inno_installer == 'true' || steps.targets.outputs.linux_sh == 'true' || steps.targets.outputs.linux_deb == 'true'
@@ -98,7 +98,7 @@ jobs:
           if [ -f packaging/app.spec ]; then
             pyinstaller --noconfirm --distpath build/dist --workpath build/work packaging/app.spec
             mkdir -p release
-            if [ "$RUNNER_OS" = "Windows" ] && [ "${{ steps.targets.outputs.windows_exe }}" = "true" ]; then cp build/dist/app.exe release/; fi
+            if [ "$RUNNER_OS" = "Windows" ] && [ "${{ steps.targets.outputs.windows_exe }}" = "true" ]; then cp build/dist/app.exe "release/app-$PKGVER-windows.exe"; fi
           fi
       - name: Linux packages (.sh and .deb, if selected)
         if: runner.os == 'Linux' && (steps.targets.outputs.linux_sh == 'true' || steps.targets.outputs.linux_deb == 'true')
@@ -108,7 +108,7 @@ jobs:
           mkdir -p release
           if [ "${{ steps.targets.outputs.linux_sh }}" = "true" ]; then bash scripts/make_sh.sh "$SRC" "release/app-$PKGVER-linux.sh"; fi
           if [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then bash scripts/make_deb.sh "$SRC" app "$PKGVER" release; fi
-          cp scripts/install-linux.sh release/install-linux.sh
+          cp scripts/install-linux.sh "release/app-$PKGVER-linux-install.sh"
       - name: Inno Setup installer (Windows, if selected)
         if: runner.os == 'Windows' && steps.targets.outputs.windows_inno_installer == 'true'
         shell: bash
@@ -118,13 +118,23 @@ jobs:
           mkdir -p release
           # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
           MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppVersion=$PKGVER" packaging/installer.iss
-          ls release/*-setup.exe
+          ls "release/app-$PKGVER-windows-setup.exe"
       - name: uv deploy bundle (Linux runner only, if selected)
         if: runner.os == 'Linux' && steps.targets.outputs.uv_deploy == 'true'
         shell: bash
         run: |
           mkdir -p release
           git archive --format=tar.gz --prefix="app-$PKGVER/" -o "release/app-$PKGVER-uv.tar.gz" HEAD
+      # Runs on pull requests too, so a file with the wrong name never reaches main
+      - name: Check every file is named app-<version>-<platform>
+        shell: bash
+        run: |
+          bad=0
+          for f in release/*; do
+            [ -e "$f" ] || continue
+            case "$(basename "$f")" in "app-$PKGVER-"*) ;; *) echo "::error::$f does not follow app-$PKGVER-<platform>"; bad=1 ;; esac
+          done
+          exit $bad
       - uses: actions/upload-artifact@v5
         with:
           name: release-${{ matrix.os }}

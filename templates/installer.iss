@@ -11,7 +11,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\{#MyAppName}
 OutputDir=..\release
-OutputBaseFilename={#MyAppName}-{#MyAppVersion}-setup
+OutputBaseFilename={#MyAppName}-{#MyAppVersion}-windows-setup
 Compression=lzma2
 SolidCompression=yes
 

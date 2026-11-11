@@ -23,6 +23,17 @@ Written by `scripts/generate.sh`. Every file is listed so an agent can find it w
 - `VERSION`: the major version number. The release tag is `v<VERSION>.<yyyymmdd_hhmm>` in UTC. Packages (.deb, .sh, installer, zips) use `<VERSION>.<yyyymmddhhmm>`, so every release is a newer package version. If a tag already exists, the run adds a suffix.
 - `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to this file for each agent.
 
+## Release file names
+Every file in a release is named `app-<version>-<platform>[-<kind>].<ext>`, with `<version>` = `<VERSION>.<yyyymmddhhmm>`. The build job fails on a file that does not follow it, on pull requests too.
+- `app-<version>-windows.exe`: the PyInstaller exe
+- `app-<version>-windows-setup.exe`: the Inno Setup installer
+- `app-<version>-linux.sh`: the self-extracting Linux installer
+- `app-<version>-linux-amd64.deb`: the Debian package
+- `app-<version>-linux-install.sh`: the install helper (`scripts/install-linux.sh`)
+- `app-<version>-frontend.zip`: the built SPA
+- `app-<version>-uv.tar.gz`: the source bundle for uv deploy
+- `SHA256SUMS`, and a `.bundle` (cosign) or `.sig` (ed25519) next to each file: these keep their standard names so `sha256sum -c` and the verify commands work unchanged.
+
 ## Answers recorded at setup (edit `distribution.json` to change)
 The setup agent fills in the "Answer" column from the user's answers and writes the same values into `distribution.json`. A cell that still reads `<fill in>` means the question has not been asked yet.
 
