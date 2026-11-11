@@ -1,6 +1,7 @@
 ---
 name: distribution
 description: Use when the user wants release builds (Windows .exe, Linux .sh/.deb, a frontend bundle, or a Docker image) with SHA256 checksums and signatures (cosign or Ed25519), published on every merge via GitHub Actions. Asks setup questions first.
+license: MIT OR Apache-2.0
 ---
 
 # Distribution skill
