@@ -26,4 +26,4 @@ jobs:
       - name: Skill checks
         run: |
           pip install pyyaml
-          bash scripts/test_skill.sh
+          DOCKER_BUILD=1 bash scripts/test_skill.sh

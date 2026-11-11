@@ -26,6 +26,9 @@ major="$(tr -d '[:space:]' < VERSION)"; stamp="$(date -u +%Y%m%d_%H%M)"
 ver="v$major.$stamp"              # release tag, same scheme as the workflow
 pkgver="$major.${stamp/_/}"       # package version for .deb, .sh and the installer
 out="$root/release"; rm -rf "$out"; mkdir -p "$out"
+if [ "$(cfg "d['targets'].get('docker',False)")" = "True" ]; then
+  echo "note: the Docker image is built and pushed to GHCR only by the GitHub workflow; locally, run: docker build -t app:$pkgver ." >&2
+fi
 
 # 1. Frontend first, so PyInstaller can bundle it (bundle_frontend) and the SPA zip can ship it
 if { flag node_spa_zip || [ "$bundle_frontend" = "True" ]; } && [ -f "$frontend_dir/package.json" ]; then

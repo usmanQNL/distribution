@@ -1,0 +1,23 @@
+# Keeps the Docker build context small and keeps secrets out of the image. Written by the distribution skill.
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+node_modules
+build
+dist
+dist-pkg
+release
+*.exe
+*.deb
+*.bundle
+*.sig
+SHA256SUMS
+packaging/keys
+*-private.pem
+.env
+.env.*
+Dockerfile
+.dockerignore

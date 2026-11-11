@@ -7,7 +7,8 @@
     "linux_sh": false,
     "linux_deb": false,
     "node_spa_zip": false,
-    "uv_deploy": false
+    "uv_deploy": false,
+    "docker": false
   },
   "bundle_frontend": false,
   "frontend_dir": ".",

@@ -1,6 +1,6 @@
 ---
 name: distribution
-description: Use when the user wants release builds (Windows .exe, Linux .sh/.deb, or a frontend bundle) with SHA256 checksums and signatures (cosign or Ed25519), published on every merge via GitHub Actions. Asks setup questions first.
+description: Use when the user wants release builds (Windows .exe, Linux .sh/.deb, a frontend bundle, or a Docker image) with SHA256 checksums and signatures (cosign or Ed25519), published on every merge via GitHub Actions. Asks setup questions first.
 ---
 
 # Distribution skill
@@ -34,6 +34,7 @@ Ask about each artifact separately. Only the ones the user says yes to are built
 - **Linux .deb** (`linux_deb`): a Debian or Ubuntu package. Pro: installs with apt or dpkg. Con: only for Debian-based systems.
 - **Node SPA zip** (`node_spa_zip`): the `npm run build` output zipped, once per release (`app-<version>-frontend.zip`). Pro: small and simple. Con: needs a server to serve it.
 - **uv deploy** (`uv_deploy`): no binary, the target runs the app with uv. The release gets `app-<version>-uv.tar.gz`, the source at that commit with `scripts/uv-deploy.sh` inside. Pro: no build step. Con: the target needs Python and uv, and the project needs a `pyproject.toml`.
+- **Docker image** (`docker`): a `Dockerfile` and `.dockerignore` for the project. Every pull request builds the image as a check. Every merge to main pushes it to GitHub Container Registry as `ghcr.io/<owner>/<repo>:<version>` and `:latest`, signs it with cosign (keyless), and adds `app-<version>-docker.txt` (the image digest) to the release. Pro: runs the same on any host with Docker, and suits servers. Con: the target needs Docker, the image is Linux amd64 only, and a new GHCR package starts private. Python and Mix projects get the Python file; Node projects get the Node file, which has a `spa` stage (nginx) and a `server` stage (`npm start`): keep the one that matches Q2 and delete the other.
 
 Every release file is named `app-<version>-<platform>[-<kind>].<ext>` (the list is in `distribution.md`, "Release file names").
 
@@ -72,11 +73,14 @@ After the answers are saved in `distribution.json`:
    - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one. Set the `targets` flags and the frontend keys from the answers.
    - `packaging/app.spec` and `packaging/installer.iss`, unless the project already has them
    - `scripts/`: `checksums.sh`, `sign.sh`, `make_sh.sh`, `make_deb.sh`, `prune_releases.sh`, `install-linux.sh` and `uv-deploy.sh`. The workflow calls them.
+   - `Dockerfile` and `.dockerignore`, only when `targets.docker` is true and the project has none yet: `templates/Dockerfile.python` for Python or Mix, `templates/Dockerfile.node` for Node. If `docker` was set to true after the first run, run `generate.sh` again; it keeps files that already exist.
    - `distribution.md` and the `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` pointers
 3. Write the answers and repo details into the project's `distribution.md` (copied from `templates/distribution.md`). Fill in every `<fill in>` cell: the answers, the repos, the secrets' status and the local folder. Never write a token or key value. Keep it current whenever an answer changes. It is the agent-neutral record, so a new agent from any provider can run the release cycle from it. A record with any `<fill in>` left is not finished.
 4. Tell the user which files were written and what to commit. The user commits and pushes; this skill does not push.
 
 The Python spec needs its entry point and any built frontend filled in. Fill in `ENTRY` and `DATAS` for the project.
+
+If Docker was chosen, fill in the Dockerfile too: pick the `CMD` line for the framework (the template lists CLI, Flask, FastAPI and Streamlit) and set `EXPOSE`. For a Mix project with a bundled frontend, uncomment the `frontend` stage and its `COPY --from` line. For Node, delete the stage that does not match Q2. Check it locally with `docker build -t app .` and `docker run --rm -p 8000:8000 app` when Docker is installed.
 
 The `test/samples/` folder has a HelloWorld app for node, python-uv, flask, streamlit and fastapi. Use them to check the templates before a real project.
 
@@ -99,13 +103,15 @@ Walk the user through this, one step at a time. Wait for confirmation before the
      openssl pkey -in release-signing-private.pem -pubout -out packaging/keys/release-signing-public.pem
      ```
      Commit `packaging/keys/release-signing-public.pem`. Add the private file to the repo secrets as `RELEASE_SIGNING_KEY` (paste the whole PEM contents), then delete the local private file or keep it somewhere safe. Never commit it.
-5. **Turn on branch protection for main.** The release workflow runs its build jobs on every pull request (it publishes only from main). Require `build (ubuntu-latest)` and `build (windows-latest)` to pass before merge, so a broken build cannot merge.
+5. **Turn on branch protection for main.** The release workflow runs its build jobs on every pull request (it publishes only from main). Require `build (ubuntu-latest)` and `build (windows-latest)` to pass before merge, and `docker` too if Docker was chosen, so a broken build cannot merge.
+5b. **Docker only: nothing to create.** The workflow pushes with its own `GITHUB_TOKEN` (`packages: write`), so no secret is needed. After the first merge, the image is under the repo's Packages. GHCR makes a new package private; to let anyone pull it, open the package, Package settings, Change visibility, Public.
 6. **Trigger the first run.** Merge a small change to main, or use the Actions tab, Run workflow. Open the run and check each job is green.
 7. **Verify the release.** Download the artifacts, `SHA256SUMS`, and the signature files (`.bundle` for cosign, `.sig` for ed25519). Then:
    - Checksums: `sha256sum -c SHA256SUMS`
    - If cosign: `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
    - If cosign and the release was made locally: only `SHA256SUMS` is signed, with the person's own identity. See "Verify a release" in `distribution.md`.
    - If ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
+   - If Docker: `docker pull` the digest from `app-<version>-docker.txt`, then (cosign) `cosign verify ghcr.io/<owner>/<repo>@<digest> --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com`. With ed25519 the signed `app-<version>-docker.txt` vouches for the digest.
 
 For each step, the skill says what to click and what a green result looks like. If a step fails, the skill reads the log and suggests the fix. It does not guess at the secret name or token scope.
 

@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1
+# Docker image for a Node app. Written by the distribution skill (generate.sh) when targets.docker is true in distribution.json.
+# Two final stages: "spa" serves the static build with nginx, "server" runs a Node server (npm start).
+# Keep the one that matches the setup answer (Q2) and delete the other; until then pick it with --target.
+# Build: docker build --target spa -t app .    Run: docker run --rm -p 8080:8080 app
+
+FROM node:24-slim AS build
+WORKDIR /app
+COPY package*.json ./
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+COPY . .
+RUN npm run build --if-present
+
+# SPA: the build output (frontend_dist in distribution.json, usually dist) served on port 8080 as a non-root user.
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS spa
+ARG DIST=dist
+COPY --from=build /app/${DIST} /usr/share/nginx/html
+EXPOSE 8080
+
+# Node server: production dependencies only. Set the port your server listens on.
+FROM node:24-slim AS server
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /app .
+RUN npm prune --omit=dev
+USER node
+EXPOSE 3000
+CMD ["npm", "start"]
