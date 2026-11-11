@@ -10,14 +10,14 @@ Written by `scripts/generate.sh`. Every file is listed so an agent can find it w
 - `distribution.json`: the answers in machine form. The scripts read it. Edit it to change what is built. Besides `targets`, it holds `bundle_frontend`, `frontend_dir` (folder with `package.json`) and `frontend_dist` (its build output) for apps with a frontend.
 - `distribution.md`: this file. It holds the human-readable record of the same answers.
 - `.github/workflows/release.yml`: the GitHub Actions workflow. Do not edit unless changing the pipeline.
-- `packaging/app.spec`: PyInstaller spec. `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root. PyInstaller writes to `build/dist/`, apart from a frontend's `dist/`.
-- `packaging/installer.iss`: Inno Setup script. Used only when `windows_inno_installer` is true. Its paths are relative to `packaging/`, so the exe is `..\build\dist\app.exe`.
+- `packaging/app.spec`: PyInstaller spec. It reads `NAME` from `app_name` in `distribution.json`, so the build is `build/dist/<app_name>.exe` (Windows) or `build/dist/<app_name>` (Linux). `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root. PyInstaller writes to `build/dist/`, apart from a frontend's `dist/`.
+- `packaging/installer.iss`: Inno Setup script. Used only when `windows_inno_installer` is true. Its paths are relative to `packaging/`, so the exe is `..\build\dist\<app_name>.exe`. The workflow passes `MyAppName` (`app_name`) and `MyAppVersion`.
 - `scripts/checksums.sh`: writes `SHA256SUMS`.
 - `scripts/sign.sh`: signs with cosign or ed25519.
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`: Linux `.sh` installer and `.deb` package.
 - `scripts/install-linux.sh`: installs the Linux release for a user, or system-wide with `--system`. Copied into each Linux release.
-- `scripts/uv-deploy.sh`: runs the app with uv on the target. Used only when `uv_deploy` is true: the release gets `app-<version>-uv.tar.gz` (the source at that commit), and the target extracts it and runs `bash scripts/uv-deploy.sh`. Needs a `pyproject.toml`. `APP_CMD` sets the command (default `python main.py`).
 - `Dockerfile`, `.dockerignore`: only when `targets.docker` is true. From `templates/Dockerfile.python` (Python or Mix) or `templates/Dockerfile.node` (Node, with a `spa` and a `server` stage; keep one). Fill in `CMD` and `EXPOSE`. The workflow's `docker` job builds it on every pull request and, on main, pushes `ghcr.io/<owner>/<repo>:<version>` and `:latest`, signed with cosign. Local runs do not build it.
+- `scripts/uv-deploy.sh`: runs the app with uv on the target. Used only when `uv_deploy` is true: the release gets `<app_name>-<version>-uv.tar.gz` (the source at that commit), and the target extracts it and runs `bash scripts/uv-deploy.sh`. Needs a `pyproject.toml`. `APP_CMD` sets the command (default `python main.py`).
 - `scripts/prune_releases.sh`: deletes releases older than `artifact_retention_days`. Runs only from a manual workflow run with `prune_releases` ticked. Try it first with `bash scripts/prune_releases.sh <owner/repo> <days> --dry-run`.
 - `scripts/release_local.sh` (Linux and macOS) and `scripts/release_local.bat` (Windows, calls the .sh through Git Bash): local builds. Used only when `build_location` is `local`.
 - `packaging/keys/release-signing-public.pem`: public key, only for `ed25519` signing. Never put the private key in the repo.
@@ -25,15 +25,15 @@ Written by `scripts/generate.sh`. Every file is listed so an agent can find it w
 - `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to this file for each agent.
 
 ## Release file names
-Every file in a release is named `app-<version>-<platform>[-<kind>].<ext>`, with `<version>` = `<VERSION>.<yyyymmddhhmm>`. The build job fails on a file that does not follow it, on pull requests too.
-- `app-<version>-windows.exe`: the PyInstaller exe
-- `app-<version>-windows-setup.exe`: the Inno Setup installer
-- `app-<version>-linux.sh`: the self-extracting Linux installer
-- `app-<version>-linux-amd64.deb`: the Debian package
-- `app-<version>-linux-install.sh`: the install helper (`scripts/install-linux.sh`)
-- `app-<version>-frontend.zip`: the built SPA
-- `app-<version>-uv.tar.gz`: the source bundle for uv deploy
-- `app-<version>-docker.txt`: the Docker image name, tag and digest (the image itself is in GHCR as `ghcr.io/<owner>/<repo>:<version>`)
+- `<app_name>-<version>-docker.txt`: the Docker image name, tag and digest (the image itself is in GHCR as `ghcr.io/<owner>/<repo>:<version>`)
+Every file in a release is named `<app_name>-<version>-<platform>[-<kind>].<ext>`, with `<app_name>` from `distribution.json` (the release name, asked at setup) and `<version>` = `<VERSION>.<yyyymmddhhmm>`. For example, with `app_name` set to `acme-notes`: `acme-notes-1.202611110638-windows.exe`. The build job fails on a file that does not follow it, on pull requests too.
+- `<app_name>-<version>-windows.exe`: the PyInstaller exe
+- `<app_name>-<version>-windows-setup.exe`: the Inno Setup installer
+- `<app_name>-<version>-linux.sh`: the self-extracting Linux installer
+- `<app_name>-<version>-linux-amd64.deb`: the Debian package
+- `<app_name>-<version>-linux-install.sh`: the install helper (`scripts/install-linux.sh`)
+- `<app_name>-<version>-frontend.zip`: the built SPA
+- `<app_name>-<version>-uv.tar.gz`: the source bundle for uv deploy
 - `SHA256SUMS`, and a `.bundle` (cosign) or `.sig` (ed25519) next to each file: these keep their standard names so `sha256sum -c` and the verify commands work unchanged.
 
 ## Answers recorded at setup (edit `distribution.json` to change)
@@ -41,6 +41,7 @@ The setup agent fills in the "Answer" column from the user's answers and writes 
 
 | # | Question | Answer | Options |
 |---|---|---|---|
+| Q0 | Release name (`app_name`): the first part of every release file name, the exe and the command | <fill in> | The project name (default), or a name the user picks |
 | Q1 | Language | <fill in> | Python only, Node only, Mix |
 | Q2 | Node is a single-page app (SPA)? (Node only) | <fill in> | Yes (static files), No (Node server) |
 | Q3 | Python framework and frontend | <fill in> | None, Flask/FastAPI bundled, Flask/FastAPI beside (not built yet), uv deploy |
@@ -56,7 +57,7 @@ The setup agent fills in the "Answer" column from the user's answers and writes 
 | Q5 | Signing (`signing`) | <fill in> | cosign, ed25519 |
 | Q6 | Release trigger and publishing | <fill in> | Every merge to main to a releases repo; other options are not built into the template |
 | Q7 | Artifact retention (`artifact_retention_days`) | <fill in> | 7 (default), keep everything. Old releases are deleted only by a manual run with `prune_releases` |
-| - | App name and entry point (`app_name`, `entry`) | <fill in> | |
+| - | Entry point (`entry`) | <fill in> | |
 
 ## Repos, secrets, folders (fill in for this project)
 Fill in every line. The setup agent writes these from the user's answers. Never write a token or key value here.
@@ -113,7 +114,7 @@ Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` 
 - cosign, release from GitHub Actions (one `.bundle` per file): `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
 - cosign, release made locally (only `SHA256SUMS.bundle`, signed with the person's own login): `cosign verify-blob --bundle SHA256SUMS.bundle --certificate-identity <email used to sign> --certificate-oidc-issuer <issuer> SHA256SUMS`, then `sha256sum -c SHA256SUMS`. The issuer is the one picked at sign-in: `https://github.com/login/oauth`, `https://accounts.google.com` or `https://login.microsoftonline.com`. Record the email and issuer in this file so others can verify.
 - ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
-- Docker image, cosign: `cosign verify ghcr.io/<owner>/<repo>@<digest> --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com`, with the digest from `app-<version>-docker.txt`. With ed25519, verify that file's `.sig`; it names the digest.
+- Docker image, cosign: `cosign verify ghcr.io/<owner>/<repo>@<digest> --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com`, with the digest from `<app_name>-<version>-docker.txt`. With ed25519, verify that file's `.sig`; it names the digest.
 
 ## Known gotchas (learned the hard way)
 - PyInstaller resolves `ENTRY` relative to the spec's folder (`packaging/`).

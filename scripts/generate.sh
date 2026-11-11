@@ -5,7 +5,15 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 target="${1:?usage: generate.sh <project-dir>}"
 mkdir -p "$target/.github/workflows" "$target/packaging"
 cp "$root/templates/release.yml" "$target/.github/workflows/release.yml"
-[ -f "$target/distribution.json" ] || cp "$root/templates/distribution.json" "$target/distribution.json"
+if [ ! -f "$target/distribution.json" ]; then
+  cp "$root/templates/distribution.json" "$target/distribution.json"
+  # app_name (the release name) defaults to the project folder name; the setup question can change it
+  name="$(basename "$(cd "$target" && pwd)" | tr -c 'A-Za-z0-9._\n-' '-' | sed 's/^[-._]*//')"
+  if [ -n "$name" ]; then
+    python3 -c 'import json,sys;p=sys.argv[1];d=json.load(open(p));d["app_name"]=sys.argv[2];open(p,"w").write(json.dumps(d,indent=2)+"\n")' \
+      "$target/distribution.json" "$name"
+  fi
+fi
 [ -f "$target/packaging/app.spec" ] || cp "$root/templates/app.spec" "$target/packaging/app.spec"
 [ -f "$target/packaging/installer.iss" ] || cp "$root/templates/installer.iss" "$target/packaging/installer.iss"
 [ -f "$target/distribution.md" ] || cp "$root/templates/distribution.md" "$target/distribution.md"

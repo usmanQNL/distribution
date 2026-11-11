@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy without PyInstaller: install the project with uv and run it on the target machine.
-# Ships inside the app-<version>-uv.tar.gz release. Extract it, then run: bash scripts/uv-deploy.sh
+# Ships inside the <app_name>-<version>-uv.tar.gz release. Extract it, then run: bash scripts/uv-deploy.sh
 # The project needs a pyproject.toml. Set APP_CMD to change the command, e.g. APP_CMD="python app.py".
 set -euo pipefail
 cd "$(dirname "$0")"

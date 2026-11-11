@@ -31,19 +31,24 @@ jobs:
       tag: ${{ steps.cfg.outputs.tag }}
       pkgver: ${{ steps.cfg.outputs.pkgver }}
       docker: ${{ steps.cfg.outputs.docker }}
+      name: ${{ steps.cfg.outputs.name }}
     steps:
       - uses: actions/checkout@v5
-      - name: Read build location and set the version once for every job
+      - name: Read build location and release name, and set the version once for every job
         id: cfg
         shell: bash
         run: |
           loc=$(python3 -c "import json;print(json.load(open('distribution.json')).get('build_location','github'))")
           docker=$(python3 -c "import json;print(str(json.load(open('distribution.json'))['targets'].get('docker',False)).lower())")
+          # Release name: the first part of every release file name, from app_name in distribution.json
+          name=$(python3 -c "import json;print(json.load(open('distribution.json')).get('app_name') or 'app')")
+          [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "::error::app_name '$name' may use only letters, digits, '.', '_' and '-' (no spaces), starting with a letter or digit"; exit 1; }
           major="$(tr -d '[:space:]' < VERSION)"
           stamp="$(date -u +%Y%m%d_%H%M)"
           {
             echo "location=$loc"
             echo "docker=$docker"
+            echo "name=$name"
             # Release tag: v<VERSION>.<yyyymmdd_hhmm> in UTC
             echo "tag=v$major.$stamp"
             # Package version for .deb, .sh and the installer: digits and dots only, grows with every release
@@ -59,6 +64,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       PKGVER: ${{ needs.config.outputs.pkgver }}
+      APP_NAME: ${{ needs.config.outputs.name }}
     steps:
       - uses: actions/checkout@v5
       - name: Read selected targets and frontend settings
@@ -92,7 +98,7 @@ jobs:
         run: |
           src="${{ steps.targets.outputs.frontend_dir }}/${{ steps.targets.outputs.frontend_dist }}"
           [ -d "$src" ] || { echo "::error::frontend output $src not found"; exit 1; }
-          mkdir -p release && (cd "$src" && zip -qr "$GITHUB_WORKSPACE/release/app-$PKGVER-frontend.zip" .)
+          mkdir -p release && (cd "$src" && zip -qr "$GITHUB_WORKSPACE/release/$APP_NAME-$PKGVER-frontend.zip" .)
       # PyInstaller writes to build/dist, so it never mixes with a frontend build in dist/.
       - name: PyInstaller build (if selected and packaging/app.spec exists)
         if: steps.targets.outputs.windows_exe == 'true' || steps.targets.outputs.windows_inno_installer == 'true' || steps.targets.outputs.linux_sh == 'true' || steps.targets.outputs.linux_deb == 'true'
@@ -101,17 +107,17 @@ jobs:
           if [ -f packaging/app.spec ]; then
             pyinstaller --noconfirm --distpath build/dist --workpath build/work packaging/app.spec
             mkdir -p release
-            if [ "$RUNNER_OS" = "Windows" ] && [ "${{ steps.targets.outputs.windows_exe }}" = "true" ]; then cp build/dist/app.exe "release/app-$PKGVER-windows.exe"; fi
+            if [ "$RUNNER_OS" = "Windows" ] && [ "${{ steps.targets.outputs.windows_exe }}" = "true" ]; then cp "build/dist/$APP_NAME.exe" "release/$APP_NAME-$PKGVER-windows.exe"; fi
           fi
       - name: Linux packages (.sh and .deb, if selected)
         if: runner.os == 'Linux' && (steps.targets.outputs.linux_sh == 'true' || steps.targets.outputs.linux_deb == 'true')
         shell: bash
         run: |
-          if [ -d build/dist/app ]; then SRC=build/dist/app; elif [ -f build/dist/app ]; then SRC=build/dist; else echo "::error::no PyInstaller output in build/dist"; exit 1; fi
+          if [ -d "build/dist/$APP_NAME" ]; then SRC="build/dist/$APP_NAME"; elif [ -f "build/dist/$APP_NAME" ]; then SRC=build/dist; else echo "::error::no PyInstaller output in build/dist"; exit 1; fi
           mkdir -p release
-          if [ "${{ steps.targets.outputs.linux_sh }}" = "true" ]; then bash scripts/make_sh.sh "$SRC" "release/app-$PKGVER-linux.sh"; fi
-          if [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then bash scripts/make_deb.sh "$SRC" app "$PKGVER" release; fi
-          cp scripts/install-linux.sh "release/app-$PKGVER-linux-install.sh"
+          if [ "${{ steps.targets.outputs.linux_sh }}" = "true" ]; then bash scripts/make_sh.sh "$SRC" "release/$APP_NAME-$PKGVER-linux.sh" "$APP_NAME"; fi
+          if [ "${{ steps.targets.outputs.linux_deb }}" = "true" ]; then bash scripts/make_deb.sh "$SRC" "$APP_NAME" "$PKGVER" release; fi
+          sed "s/^APP=app\$/APP=$APP_NAME/" scripts/install-linux.sh > "release/$APP_NAME-$PKGVER-linux-install.sh"
       - name: Inno Setup installer (Windows, if selected)
         if: runner.os == 'Windows' && steps.targets.outputs.windows_inno_installer == 'true'
         shell: bash
@@ -120,22 +126,22 @@ jobs:
           [ -f "$iscc" ] || choco install innosetup -y --no-progress
           mkdir -p release
           # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
-          MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppVersion=$PKGVER" packaging/installer.iss
-          ls "release/app-$PKGVER-windows-setup.exe"
+          MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppName=$APP_NAME" "/DMyAppVersion=$PKGVER" packaging/installer.iss
+          ls "release/$APP_NAME-$PKGVER-windows-setup.exe"
       - name: uv deploy bundle (Linux runner only, if selected)
         if: runner.os == 'Linux' && steps.targets.outputs.uv_deploy == 'true'
         shell: bash
         run: |
           mkdir -p release
-          git archive --format=tar.gz --prefix="app-$PKGVER/" -o "release/app-$PKGVER-uv.tar.gz" HEAD
+          git archive --format=tar.gz --prefix="$APP_NAME-$PKGVER/" -o "release/$APP_NAME-$PKGVER-uv.tar.gz" HEAD
       # Runs on pull requests too, so a file with the wrong name never reaches main
-      - name: Check every file is named app-<version>-<platform>
+      - name: Check every file is named <app_name>-<version>-<platform>
         shell: bash
         run: |
           bad=0
           for f in release/*; do
             [ -e "$f" ] || continue
-            case "$(basename "$f")" in "app-$PKGVER-"*) ;; *) echo "::error::$f does not follow app-$PKGVER-<platform>"; bad=1 ;; esac
+            case "$(basename "$f")" in "$APP_NAME-$PKGVER-"*) ;; *) echo "::error::$f does not follow $APP_NAME-$PKGVER-<platform>"; bad=1 ;; esac
           done
           exit $bad
       - uses: actions/upload-artifact@v5
@@ -147,7 +153,7 @@ jobs:
 
   # Docker image (targets.docker): built on every pull request as a check. On main it is pushed to
   # ghcr.io/<owner>/<repo> as :<version> and :latest, signed with cosign (keyless), and the release gets
-  # app-<version>-docker.txt with the image digest, which is checksummed and signed with the other files.
+  # <app_name>-<version>-docker.txt with the image digest, which is checksummed and signed with the other files.
   docker:
     needs: config
     if: needs.config.outputs.location == 'github' && needs.config.outputs.docker == 'true'
@@ -158,6 +164,7 @@ jobs:
       id-token: write
     env:
       PKGVER: ${{ needs.config.outputs.pkgver }}
+      APP_NAME: ${{ needs.config.outputs.name }}
     steps:
       - uses: actions/checkout@v5
       - name: Build the image
@@ -181,7 +188,7 @@ jobs:
           ref="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$PKGVER")"
           echo "REF=$ref" >> "$GITHUB_ENV"
           mkdir -p release
-          printf 'image: %s:%s\ndigest: %s\npull: docker pull %s\n' "$IMAGE" "$PKGVER" "$ref" "$ref" > "release/app-$PKGVER-docker.txt"
+          printf 'image: %s:%s\ndigest: %s\npull: docker pull %s\n' "$IMAGE" "$PKGVER" "$ref" "$ref" > "release/$APP_NAME-$PKGVER-docker.txt"
       - name: Read signing mode
         if: github.event_name != 'pull_request'
         id: signing
@@ -189,7 +196,7 @@ jobs:
         run: |
           mode=$(python3 -c "import json;print(json.load(open('distribution.json')).get('signing','cosign'))")
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
-      # With ed25519 the image is covered by the signed app-<version>-docker.txt, which names its digest.
+      # With ed25519 the image is covered by the signed <app_name>-<version>-docker.txt, which names its digest.
       - uses: sigstore/cosign-installer@v3
         if: github.event_name != 'pull_request' && steps.signing.outputs.mode == 'cosign'
       - name: Sign the image (cosign)

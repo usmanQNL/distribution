@@ -91,7 +91,25 @@ for e in errs: print("  " + e, file=sys.stderr)
 sys.exit(1 if errs else 0)
 PY
 # Inno resolves Source paths from packaging/, and PyInstaller writes to build/dist
-grep -q 'Source: "\.\.\\build\\dist\\app.exe"' templates/installer.iss && ok "installer source path" || bad "installer Source must be ..\\build\\dist\\app.exe"
+grep -q 'Source: "\.\.\\build\\dist\\{#MyAppName}\.exe"' templates/installer.iss && ok "installer source path" || bad "installer Source must be ..\\build\\dist\\{#MyAppName}.exe"
+
+# 7. The release name (app_name) is used everywhere a release file or the build is named
+python3 -c "import json,sys;d=json.load(open(sys.argv[1]));sys.exit(0 if d['app_name']==sys.argv[2] else 1)" "$t/distribution.json" "$(basename "$t")" \
+  && ok "generate sets app_name to the project folder name" || bad "generate must set app_name to the project folder name"
+for f in templates/release.yml scripts/release_local.sh; do
+  if grep -nE '(release|out)/app-|"app-\$|app:\$pkgver|build/dist/app|make_deb\.sh "\$[A-Za-z]+" app ' "$f"; then bad "$f still hard-codes app in a release name"; else ok "no hard-coded app names in $f"; fi
+done
+grep -q '"\$APP_NAME-\$PKGVER-"\*)' templates/release.yml && ok "name check uses app_name" || bad "the name check must use \$APP_NAME-\$PKGVER-"
+grep -q '/DMyAppName=' templates/release.yml && grep -q '/DMyAppName=' scripts/release_local.sh && ok "installer gets MyAppName" || bad "ISCC must get /DMyAppName"
+grep -q 'get("app_name")' templates/app.spec && ok "spec reads app_name" || bad "templates/app.spec must read NAME from app_name"
+grep -q '^APP=app$' scripts/install-linux.sh && ok "install helper has the APP=app line the build replaces" || bad "install-linux.sh needs an APP=app line"
+p="$t/pkg"; mkdir -p "$p/src"; echo hi > "$p/src/demo"
+bash scripts/make_sh.sh "$p/src" "$p/demo.sh" demo >/dev/null && grep -q '.local/share/demo' "$p/demo.sh" \
+  && ok "make_sh installs to ~/.local/share/<app_name>" || bad "make_sh must default to ~/.local/share/<app_name>"
+if command -v dpkg-deb >/dev/null 2>&1; then
+  bash scripts/make_deb.sh "$p/src" My_Demo 1.2 "$p" >/dev/null 2>&1 && [ "$(dpkg-deb -f "$p/My_Demo-1.2-linux-amd64.deb" Package)" = "my-demo" ] \
+    && ok "make_deb names the file from app_name and lowercases the package" || bad "make_deb name handling"
+else echo "skip: dpkg-deb not installed"; fi
 for f in templates/release.yml scripts/release_local.sh; do
   grep -q -- '--distpath build/dist' "$f" && ok "pyinstaller distpath in $f" || bad "pyinstaller must write to build/dist in $f"
 done

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Usage: make_sh.sh <src-dir> <out-file.sh>  -> self-extracting shell installer for a folder
+# Usage: make_sh.sh <src-dir> <out-file.sh> [name]  -> self-extracting shell installer for a folder.
+# name (app_name) sets the default install folder, ~/.local/share/<name>.
 set -euo pipefail
-src="${1:?usage: make_sh.sh <src-dir> <out.sh>}"; out="${2:?usage: make_sh.sh <src-dir> <out.sh>}"
+src="${1:?usage: make_sh.sh <src-dir> <out.sh>}"; out="${2:?usage: make_sh.sh <src-dir> <out.sh>}"; name="${3:-app}"
 payload="$(mktemp)"
 tar -C "$src" -czf "$payload" .
 {
   echo '#!/usr/bin/env bash'
   echo 'set -euo pipefail'
-  echo 'dest="${1:-$HOME/.local/share/app}"; mkdir -p "$dest"'
+  echo "dest=\"\${1:-\$HOME/.local/share/$name}\"; mkdir -p \"\$dest\""
   echo 'n=$(awk "/^__PAYLOAD__$/{print NR+1; exit 0}" "$0")'
   echo 'tail -n +"$n" "$0" | tar -xz -C "$dest"'
   echo 'echo "installed to $dest"; exit 0'
