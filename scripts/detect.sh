@@ -7,7 +7,7 @@ if [ -f "$dir/pyproject.toml" ] || [ -f "$dir/requirements.txt" ]; then py=1; fi
 if [ -f "$dir/package.json" ]; then node=1; fi
 if [ $py = 1 ]; then
   for f in flask fastapi streamlit; do
-    grep -qis "$f" "$dir/requirements.txt" "$dir/pyproject.toml" 2>/dev/null && framework=$f
+    if [ "$framework" = none ] && grep -qiw "$f" "$dir/requirements.txt" "$dir/pyproject.toml" 2>/dev/null; then framework=$f; fi
   done
 fi
 if [ $py = 1 ] && [ $node = 1 ]; then lang=mix

@@ -9,6 +9,7 @@
     "node_spa_zip": false,
     "uv_deploy": false
   },
+  "signing": "cosign",
   "build_location": "github",
   "releases_repo": "usmanQNL/distribution-test"
 }

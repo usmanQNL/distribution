@@ -28,10 +28,10 @@ On every push to `main` (and on manual run), GitHub Actions builds the selected 
 | Node SPA zip | off by default | on/off |
 | uv deploy | off by default (no build) | on/off |
 | Build location | `github` (default) | `github` (Actions builds, signs, publishes) or `local` (run `scripts/release_local.bat` on Windows, or `scripts/release_local.sh` elsewhere) |
-| Signing | `cosign` (default) | `cosign` or `ed25519` |
+| Signing | `cosign` (default) | `cosign` or `ed25519`. CI signs each file with cosign. Local `cosign` mode signs only `SHA256SUMS` (one sign-in per run), so verify local releases with `SHA256SUMS.bundle`. Use `cosign-all` in the script for per-file bundles. |
 | Trigger | every merge to main, plus manual run | |
 | Publish | separate public releases repo | |
-| Artifact retention | 7 days (intended; not implemented in the template yet) | |
+| Artifact retention | 7 days (recorded as `artifact_retention_days` in `distribution.json`; pruning not implemented yet) | |
 
 ## Repos, secrets, folders (as used in this project)
 - Skill source: `usmanQNL/distribution` (local: `C:\development\claudeCode\skills\distribution`).

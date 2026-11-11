@@ -24,7 +24,7 @@ out="$root/release"; rm -rf "$out"; mkdir -p "$out"
 
 # 1. Node SPA
 if flag node_spa_zip && [ -f package.json ]; then
-  npm ci && npm run build && (cd dist && zip -qr "$out/frontend.zip" .)
+  npm ci && npm run build && (cd dist && zip -qr "$out/frontend-$(uname -s | tr '[:upper:]' '[:lower:]').zip" .)
 fi
 
 # 2. PyInstaller (only when a packaged target is selected)
@@ -43,7 +43,7 @@ if [ "$(uname -s)" = "Linux" ]; then
   flag linux_deb && bash scripts/make_deb.sh "$src" app "$(cat VERSION)" "$out"
   [ -f "$out/app" ] && { flag linux_sh || flag linux_deb; } && rm -f "$out/app"
   # Install script for Linux users, published alongside the installers
-  { flag linux_sh || flag linux_deb; } && cp "$root/templates/install-linux.sh" "$out/install-linux.sh"
+  { flag linux_sh || flag linux_deb; } && cp "$root/scripts/install-linux.sh" "$out/install-linux.sh"
 fi
 
 # 4. Windows Inno Setup (needs Inno Setup 6 installed; run on Windows)
