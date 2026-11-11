@@ -37,8 +37,17 @@ Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-depl
 - `scripts/prune_releases.sh`: opt-in deletion of old releases
 - `scripts/release_local.sh`, `scripts/release_local.bat`: local builds
 - `scripts/test_skill.sh`: the skill's own checks, run in CI
+- `scripts/check_dco.sh`: the DCO sign-off check, run in CI on every pull request, repo-only (not copied into projects)
 - `test/samples/`: HelloWorld apps for node, python-uv, flask, streamlit and fastapi
+- `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`: the skill's dual license
+- `CONTRIBUTING.md`: how to contribute, including the DCO sign-off
 
 ## Status
 
 `scripts/test_skill.sh` runs in CI on every pull request, with shellcheck and actionlint. This repo also runs its own release workflow on the Flask sample: every pull request builds the Windows exe and installer, the Linux .sh and .deb, the uv bundle and the Docker image, and every merge to main publishes them, signed with cosign, to `usmanQNL/distribution-test` (the image goes to `ghcr.io/usmanqnl/distribution`). CI also builds the Dockerfile templates against the sample apps.
+
+## License
+
+Licensed under either of the [MIT License](LICENSE-MIT) or the [Apache License, Version 2.0](LICENSE-APACHE), at your option (`SPDX-License-Identifier: MIT OR Apache-2.0`). Contributions are accepted under the same terms and must be signed off under the Developer Certificate of Origin (`git commit -s`). See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+This license covers the skill itself. It does not apply to the projects the skill sets up: those keep their own license.

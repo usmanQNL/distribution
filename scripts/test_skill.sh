@@ -50,7 +50,7 @@ grep -q '<fill in' "$t/distribution.md" && ok "record has fill-in placeholders" 
 grep -qi 'usmanQNL\|QuellDAP\|C:\\' "$t/distribution.md" && bad "record contains this skill's own project details" || ok "record has no project-specific details"
 # every script the skill ships is listed in the record
 for f in scripts/*.sh; do
-  b="$(basename "$f")"; [ "$b" = test_skill.sh ] && continue
+  b="$(basename "$f")"; case "$b" in test_skill.sh|check_dco.sh) continue ;; esac  # repo-only, not shipped
   grep -q "$b" "$t/distribution.md" && ok "record lists $b" || bad "record does not list $b"
 done
 
