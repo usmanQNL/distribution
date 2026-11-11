@@ -1,7 +1,9 @@
 ; Inno Setup script template. Built on the Windows runner with: iscc packaging/installer.iss
 ; Replace MyApp and the version placeholders, or the workflow fills them in from VERSION.
 #define MyAppName "app"
+#ifndef MyAppVersion
 #define MyAppVersion "0.0.0"
+#endif
 
 [Setup]
 AppName={#MyAppName}
