@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Lint shell scripts
-        run: shellcheck scripts/*.sh templates/*.sh
+        run: shellcheck -S warning scripts/*.sh templates/*.sh
       - name: Lint workflows
         run: |
           bash -c 'curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash'

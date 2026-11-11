@@ -35,8 +35,8 @@ done || fail=1
 # 4. Copies that must stay identical
 for pair in "distribution.md templates/distribution.md" "templates/release.yml .github/workflows/release.yml" \
             "templates/installer.iss packaging/installer.iss"; do
-  set -- $pair
-  cmp -s "$1" "$2" && ok "in sync: $1 = $2" || bad "out of sync: $1 and $2"
+  read -r a b <<< "$pair"
+  if cmp -s "$a" "$b"; then ok "in sync: $a = $b"; else bad "out of sync: $a and $b"; fi
 done
 
 # 5. Config files parse

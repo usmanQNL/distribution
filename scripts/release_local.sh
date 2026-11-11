@@ -57,7 +57,12 @@ bash scripts/checksums.sh "$out"
 case "$signing" in
   cosign) bash scripts/sign.sh "$out" cosign-sums ;;  # one browser sign-in per run
   cosign-all) bash scripts/sign.sh "$out" cosign ;;   # one sign-in per file
-  ed25519) bash scripts/sign.sh "$out" ed25519 $( [ -f packaging/keys/release-signing-public.pem ] && echo packaging/keys/release-signing-public.pem ) ;;
+  ed25519)
+    if [ -f packaging/keys/release-signing-public.pem ]; then
+      bash scripts/sign.sh "$out" ed25519 packaging/keys/release-signing-public.pem
+    else
+      bash scripts/sign.sh "$out" ed25519
+    fi ;;
 esac
 
 # 6. Publish
