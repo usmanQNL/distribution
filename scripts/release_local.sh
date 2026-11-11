@@ -55,7 +55,8 @@ fi
 [ -n "$(ls -A "$out")" ] || { echo "nothing selected to build" >&2; exit 1; }
 bash scripts/checksums.sh "$out"
 case "$signing" in
-  cosign) bash scripts/sign.sh "$out" cosign ;;
+  cosign) bash scripts/sign.sh "$out" cosign-sums ;;  # one browser sign-in per run
+  cosign-all) bash scripts/sign.sh "$out" cosign ;;   # one sign-in per file
   ed25519) bash scripts/sign.sh "$out" ed25519 $( [ -f packaging/keys/release-signing-public.pem ] && echo packaging/keys/release-signing-public.pem ) ;;
 esac
 
