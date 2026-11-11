@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: sign.sh <dir> <cosign|ed25519> [public-key.pem]
-#   cosign:  keyless Sigstore signature per file (.sig + .pem certificate). Needs id-token: write.
+#   cosign:  keyless Sigstore bundle per file (.bundle holds signature and certificate). Needs id-token: write.
 #   ed25519: signature per file (.sig) using the RELEASE_SIGNING_KEY env var (PEM private key).
 #            If a public key path is given, each signature is verified after signing.
 set -euo pipefail
@@ -11,7 +11,7 @@ pub="${3:-}"
 signable() { # skip signatures and certificates, sign everything else
   for f in "$dir"/*; do
     [ -f "$f" ] || continue
-    case "$f" in *.sig|*.pem) continue ;; esac
+    case "$f" in *.sig|*.pem|*.bundle) continue ;; esac
     printf '%s\n' "$f"
   done
 }
@@ -19,7 +19,7 @@ signable() { # skip signatures and certificates, sign everything else
 case "$mode" in
   cosign)
     while IFS= read -r f; do
-      cosign sign-blob --yes "$f" --output-signature "$f.sig" --output-certificate "$f.pem"
+      cosign sign-blob --yes --bundle "$f.bundle" "$f"
     done < <(signable)
     ;;
   ed25519)

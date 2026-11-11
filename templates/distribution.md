@@ -82,7 +82,7 @@ Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` 
 
 ## Verify a release
 - Checksums: `sha256sum -c SHA256SUMS`
-- cosign: `cosign verify-blob --certificate <file>.pem --signature <file>.sig --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
+- cosign: `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
 - ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
 
 ## Known gotchas (learned the hard way)

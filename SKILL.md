@@ -97,9 +97,9 @@ Walk the user through this, one step at a time. Wait for confirmation before the
      Commit `packaging/keys/release-signing-public.pem`. Add the private file to the repo secrets as `RELEASE_SIGNING_KEY` (paste the whole PEM contents), then delete the local private file or keep it somewhere safe. Never commit it.
 5. **Turn on branch protection for main.** Require the release workflow to pass before merge, so a broken build cannot merge.
 6. **Trigger the first run.** Merge a small change to main, or use the Actions tab, Run workflow. Open the run and check each job is green.
-7. **Verify the release.** Download the artifacts, `SHA256SUMS`, and the signature files. Then:
+7. **Verify the release.** Download the artifacts, `SHA256SUMS`, and the signature files (`.bundle` for cosign, `.sig` for ed25519). Then:
    - Checksums: `sha256sum -c SHA256SUMS`
-   - If cosign: `cosign verify-blob --certificate <file>.pem --signature <file>.sig --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
+   - If cosign: `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
    - If ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
 
 For each step, the skill says what to click and what a green result looks like. If a step fails, the skill reads the log and suggests the fix. It does not guess at the secret name or token scope.
