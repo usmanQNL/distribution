@@ -14,17 +14,17 @@ done
 
 # 2. Detection on each sample app gives the expected answer
 expect() { got="$(bash scripts/detect.sh "test/samples/$1" | tr '\n' ' ')"; [ "$got" = "$2" ] && ok "detect $1" || bad "detect $1: got '$got'"; }
-expect fastapi     "language=python python_framework=fastapi "
-expect flask       "language=python python_framework=flask "
-expect streamlit   "language=python python_framework=streamlit "
-expect python-uv   "language=python python_framework=none "
-expect node        "language=node python_framework=none "
+expect fastapi     "language=python python_framework=fastapi uses_env=no "
+expect flask       "language=python python_framework=flask uses_env=yes "
+expect streamlit   "language=python python_framework=streamlit uses_env=no "
+expect python-uv   "language=python python_framework=none uses_env=no "
+expect node        "language=node python_framework=none uses_env=no "
 
 # 3. generate.sh copies every file the generated workflow and scripts need
 t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT
 bash scripts/generate.sh "$t" >/dev/null
-for f in .github/workflows/release.yml distribution.json distribution.md packaging/app.spec packaging/installer.iss \
-         scripts/checksums.sh scripts/sign.sh scripts/make_sh.sh scripts/make_deb.sh scripts/prune_releases.sh scripts/install-linux.sh scripts/uv-deploy.sh scripts/ensure_iscc.sh scripts/ensure_gh.sh; do
+for f in .github/workflows/release.yml distribution.json distribution.md packaging/app.spec packaging/installer.iss packaging/env_hook.py \
+         scripts/checksums.sh scripts/sign.sh scripts/env_example.sh scripts/make_sh.sh scripts/make_deb.sh scripts/prune_releases.sh scripts/install-linux.sh scripts/uv-deploy.sh scripts/ensure_iscc.sh scripts/ensure_gh.sh; do
   [ -f "$t/$f" ] && ok "generated $f" || bad "generate did not write $f"
 done
 # every scripts/ path the generated workflow calls must exist in the output
@@ -54,9 +54,44 @@ for f in scripts/*.sh; do
   grep -q "$b" "$t/distribution.md" && ok "record lists $b" || bad "record does not list $b"
 done
 
+# 3c. .env: the settings template ships, the real .env never does
+e="$t/envapp"; mkdir -p "$e"; printf 'flask\npython-dotenv\n' > "$e/requirements.txt"
+printf '# db\nexport DB_PASS="s3cr3t-value"\nAPI_KEY = k3y-value # main\n# OLD=0ld-value\nPEM="-----BEGIN\nINNER=1nner-value\n-----END"\n' > "$e/.env"
+[ "$(bash scripts/detect.sh "$e" | sed -n 's/^uses_env=//p')" = yes ] && ok "detect finds a .env" || bad "detect must report uses_env=yes for a .env"
+git -C "$e" init -q
+bash scripts/generate.sh "$e" >/dev/null
+if [ -f "$e/.env.example" ] && ! grep -qE 's3cr3t|k3y|0ld|1nner|BEGIN' "$e/.env.example" && grep -qx 'DB_PASS=' "$e/.env.example" && grep -qx 'API_KEY=' "$e/.env.example"; then
+  ok "generate writes .env.example from .env with every value removed"
+else bad "generate must write .env.example from .env, names only"; fi
+git -C "$e" check-ignore -q .env && ok "generate keeps .env out of git" || bad "generate must add .env to .gitignore"
+printf 'GREETING=\n' > "$e/.env.example"
+bash scripts/env_example.sh "$e" "$t/env-out/x" >/dev/null && [ "$(cat "$t/env-out/x")" = "GREETING=" ] && ok "env_example prefers the project's .env.example" || bad "env_example must copy .env.example as it is"
+n="$t/noenv"; mkdir -p "$n"
+bash scripts/env_example.sh "$n" "$t/env-out/none" 2>/dev/null && [ ! -e "$t/env-out/none" ] && ok "env_example writes nothing without a .env" || bad "env_example must write nothing (and succeed) without a .env"
+r="$t/rel"; mkdir -p "$r"; touch "$r/my-app-1.2026-windows.exe"
+[ -z "$(bash scripts/env_example.sh --notes "$r")" ] && ok "no .env notes without a template" || bad "release notes must not mention .env without a template"
+touch "$r/my-app-1.2026-env.example" "$r/my-app-1.2026-linux-amd64.deb"
+notes="$(bash scripts/env_example.sh --notes "$r")"
+grep -q 'same folder as the .exe' <<< "$notes" && grep -q '/opt/my-app/.env' <<< "$notes" && ! grep -q 'Docker' <<< "$notes" \
+  && ok "release notes say where .env goes for the files in the release" || bad "release notes must list .env locations for the release's files only"
+grep -q 'scripts/env_example.sh . build/env/.env.example' templates/release.yml && grep -q 'scripts/env_example.sh . build/env/.env.example' scripts/release_local.sh \
+  && ok "workflow and release_local.sh write the settings template" || bad "the workflow and release_local.sh must run env_example.sh"
+grep -q -- '-env.example"' templates/release.yml && grep -q -- '-env.example"' scripts/release_local.sh && ok "template ships as <app_name>-<version>-env.example" || bad "template must ship as <app_name>-<version>-env.example"
+grep -q 'build\\env\\.env.example.*skipifsourcedoesntexist' templates/installer.iss && ok "installer ships .env.example next to the exe" || bad "installer.iss must install build\\env\\.env.example"
+grep -q 'runtime_hooks=HOOKS' templates/app.spec && grep -q 'runtime_hooks=HOOKS' packaging/app.spec && ok "spec uses env_hook.py" || bad "app.spec must pass runtime_hooks=HOOKS"
+# The hook loads the .env next to a frozen program, and never overrides the environment
+h="$t/hook"; mkdir -p "$h/bin" "$h/cwd"; printf 'A=from-file\nB="quoted value"\nC=plain # comment\nexport D=exported\n' > "$h/bin/.env"
+hook_out="$(cd "$h/cwd" && A=from-env python3 -I -c "import sys,os,runpy; sys.frozen=True; sys.executable=sys.argv[1]; sys.modules['dotenv']=None; runpy.run_path(sys.argv[2]); print(os.environ['A'],os.environ['B'],os.environ['C'],os.environ['D'],sep='|')" "$h/bin/app" "$root/templates/env_hook.py")"
+[ "$hook_out" = "from-env|quoted value|plain|exported" ] && ok "env_hook loads .env next to the program" || bad "env_hook: got '$hook_out'"
+if python3 -c "import dotenv" 2>/dev/null; then
+  hook_out="$(cd "$h/cwd" && python3 -c "import sys,os,runpy; sys.frozen=True; sys.executable=sys.argv[1]; runpy.run_path(sys.argv[2]); print(os.environ['B'],os.environ['C'],sep='|')" "$h/bin/app" "$root/templates/env_hook.py")"
+  [ "$hook_out" = "quoted value|plain" ] && ok "env_hook uses python-dotenv when present" || bad "env_hook with python-dotenv: got '$hook_out'"
+fi
+
 # 4. Copies that must stay identical
 for pair in "distribution.md templates/distribution.md" "templates/release.yml .github/workflows/release.yml" \
-            "templates/installer.iss packaging/installer.iss" "templates/dockerignore .dockerignore"; do
+            "templates/installer.iss packaging/installer.iss" "templates/dockerignore .dockerignore" \
+            "templates/env_hook.py packaging/env_hook.py" "test/samples/flask/.env.example .env.example"; do
   read -r a b <<< "$pair"
   if cmp -s "$a" "$b"; then ok "in sync: $a = $b"; else bad "out of sync: $a and $b"; fi
 done

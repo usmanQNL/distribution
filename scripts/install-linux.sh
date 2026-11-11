@@ -16,6 +16,7 @@ if [ "$mode" = "--system" ]; then
   if [ -n "$deb" ] && command -v dpkg >/dev/null 2>&1; then
     sudo dpkg -i "$deb"
     echo "installed $APP with dpkg"
+    if [ -f "/opt/$APP/.env.example" ]; then echo "settings: sudo cp /opt/$APP/.env.example /opt/$APP/.env, then fill in /opt/$APP/.env"; fi
     exit 0
   fi
   [ -n "$sh_installer" ] || { echo "no installer found next to this script" >&2; exit 1; }
@@ -24,6 +25,7 @@ if [ "$mode" = "--system" ]; then
   sudo bash "$sh_installer" "$dest"
   sudo ln -sf "$dest/$APP" /usr/local/bin/$APP
   echo "installed $APP to $dest (command: $APP)"
+  if [ -f "$dest/.env.example" ]; then echo "settings: sudo cp $dest/.env.example $dest/.env, then fill in $dest/.env"; fi
 else
   [ -n "$sh_installer" ] || { echo "no installer found next to this script" >&2; exit 1; }
   dest="$HOME/.local/share/$APP"
@@ -31,4 +33,5 @@ else
   mkdir -p "$HOME/.local/bin"
   ln -sf "$dest/$APP" "$HOME/.local/bin/$APP"
   echo "installed $APP to $dest (command: $APP, make sure ~/.local/bin is on PATH)"
+  if [ -f "$dest/.env.example" ]; then echo "settings: cp $dest/.env.example $dest/.env, then fill in $dest/.env"; fi
 fi

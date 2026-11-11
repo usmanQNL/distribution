@@ -13,6 +13,9 @@ Written by `scripts/generate.sh`. Every file is listed so an agent can find it w
 - `packaging/app.spec`: PyInstaller spec. It reads `NAME` from `app_name` in `distribution.json`, so the build is `build/dist/<app_name>.exe` (Windows) or `build/dist/<app_name>` (Linux). `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root. PyInstaller writes to `build/dist/`, apart from a frontend's `dist/`.
 - `packaging/installer.iss`: Inno Setup script. Used only when `windows_inno_installer` is true. Its paths are relative to `packaging/`, so the exe is `..\build\dist\<app_name>.exe`. The workflow passes `MyAppName` (`app_name`) and `MyAppVersion`.
 - `scripts/checksums.sh`: writes `SHA256SUMS`.
+- `scripts/env_example.sh`: writes the settings template that releases ship, from the project's `.env.example` (or `.env.sample`, `.env.template`), or, when only `.env` exists, from `.env` with every value removed. The real `.env` is never shipped. `env_example.sh --notes <release-dir>` prints the release notes that say where `.env` goes. See "Settings file (.env)" below.
+- `packaging/env_hook.py`: PyInstaller runtime hook, used by `packaging/app.spec`. It loads the `.env` next to the built program, so the documented locations work wherever the program is started from.
+- `.env.example`: the settings template, when the app reads a `.env`. Commit it; never commit `.env`.
 - `scripts/sign.sh`: signs with cosign or ed25519. `sign.sh - check-key [public.pem]` only checks `RELEASE_SIGNING_KEY`; the workflow and `release_local.sh` run it before building.
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`: Linux `.sh` installer and `.deb` package.
 - `scripts/ensure_gh.sh`: finds the GitHub CLI (`gh`), which local releases publish with, and installs it when it is missing: winget or choco on Windows, brew on macOS, the official GitHub CLI apt repo on Debian and Ubuntu, or dnf, pacman or zypper. `release_local.sh` runs it first, then checks `gh auth status` and starts `gh auth login` in a terminal if you are not logged in (or set `GH_TOKEN`). `bash scripts/ensure_gh.sh --check` only looks.
@@ -36,7 +39,25 @@ Every file in a release is named `<app_name>-<version>-<platform>[-<kind>].<ext>
 - `<app_name>-<version>-linux-install.sh`: the install helper (`scripts/install-linux.sh`)
 - `<app_name>-<version>-frontend.zip`: the built SPA
 - `<app_name>-<version>-uv.tar.gz`: the source bundle for uv deploy
+- `<app_name>-<version>-env.example`: the settings template, only when the app reads a `.env`. The user renames it to `.env`. It does not keep the plain name `.env.example` because GitHub renames release files that start with a dot.
 - `SHA256SUMS`, and a `.bundle` (cosign) or `.sig` (ed25519) next to each file: these keep their standard names so `sha256sum -c` and the verify commands work unchanged.
+
+## Settings file (.env)
+When the app reads a `.env` file (`scripts/detect.sh` prints `uses_env=yes`), every release ships a template of it, checksummed and signed like the other files: `<app_name>-<version>-env.example` in the release, and `.env.example` next to the program inside the Windows installer, the Linux `.sh` and the `.deb` (and in the uv bundle, as the committed file). The template is the project's `.env.example`; if only `.env` exists, `scripts/env_example.sh` writes it with every value removed. The real `.env` is never shipped, and Docker images never contain one (`.dockerignore` excludes `.env` and `.env.*`).
+
+The user copies the template to `.env`, fills it in, and puts it here:
+
+| Release file | Where `.env` goes |
+|---|---|
+| Windows `.exe` | The same folder as the `.exe`. |
+| Windows installer | The install folder, by default `%ProgramFiles%\<app_name>`, where the installer puts `.env.example`. Editing files there needs administrator rights. Uninstalling leaves `.env` in place. |
+| Linux `.sh` | `~/.local/share/<app_name>/.env` (or the folder given to the installer), or `/opt/<app_name>/.env` after `<app_name>-<version>-linux-install.sh --system`. |
+| Linux `.deb` | `/opt/<app_name>/.env` (needs sudo). Upgrades and removal leave it in place. |
+| uv bundle | The extracted folder, next to `pyproject.toml`. |
+| Docker | Not in the image. `docker run --env-file .env ...`, or mount it: `docker run -v "$PWD/.env:/app/.env:ro" ...`. |
+| Node SPA zip | Not read at run time: the values are built into the bundle by `npm run build`. |
+
+Built programs find `.env` next to the executable even when started from a shortcut, the Start menu or a command on `PATH`: `packaging/env_hook.py` loads it at start-up. A `.env` in the current folder is still read by the app's own `load_dotenv()`. Variables already set in the environment win over both. Each release's notes repeat the table for the files it holds.
 
 ## Answers recorded at setup (edit `distribution.json` to change)
 The setup agent fills in the "Answer" column from the user's answers and writes the same values into `distribution.json`. A cell that still reads `<fill in>` means the question has not been asked yet.
@@ -122,6 +143,8 @@ Commit only the public key. Put the whole private file into the `RELEASE_SIGNING
 
 ## Known gotchas (learned the hard way)
 - PyInstaller resolves `ENTRY` relative to the spec's folder (`packaging/`).
+- In a PyInstaller build, python-dotenv's `load_dotenv()` looks for `.env` in the current folder, not next to the program, so a `.env` beside the exe was missed when started from a shortcut or `PATH`. `packaging/env_hook.py` (a runtime hook in `packaging/app.spec`) fixes that; a spec written before it needs the `HOOKS` line from `templates/app.spec`.
+- GitHub renames release files whose names start with a dot, so the settings template ships as `<app_name>-<version>-env.example`, not `.env.example`.
 - On Windows a bare `bash` is often WSL's `bash.exe` from `Windows\System32`, which cannot run the release script. `release_local.bat` finds Git's own `bash.exe` from where `git.exe` is (so per-user Git installs work), then the usual Git folders, and never falls back to a bare `bash`.
 - Git Bash rewrites arguments that start with `/` into Windows paths, so ISCC sees `/DMyAppVersion=...` as a second script ("You may not specify more than one script filename"). Run ISCC with `MSYS_NO_PATHCONV=1`.
 - The publish job must check out the repo, or `scripts/` is missing.
