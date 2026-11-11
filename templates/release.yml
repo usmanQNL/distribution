@@ -101,6 +101,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
@@ -145,3 +146,11 @@ jobs:
           days=$(python3 -c "import json;print(json.load(open('distribution.json')).get('artifact_retention_days',7))")
           repo="${{ vars.RELEASES_REPO || format('{0}-releases', github.repository) }}"
           bash scripts/prune_releases.sh "$repo" "$days"
+      - name: Delete build artifacts after a successful publish
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --paginate --jq '.artifacts[] | select(.name | startswith("release-")) | .id')
+          for id in $ids; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done
