@@ -6,16 +6,37 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"; cd "$root"
 
-# Preflight: git must be installed, and gh must be logged in to the releases repo
+# Preflight: git must be installed, and gh must be logged in to github.com
 if ! command -v git >/dev/null 2>&1; then
   echo "git is not installed. Install it first (see distribution.md, 'Git on the local machine'), then run this again." >&2
   exit 1
 fi
-if ! gh auth status >/dev/null 2>&1; then
-  echo "gh is not logged in. Run: gh auth login (see distribution.md), then run this again." >&2
+# Python: on Windows the command is often "py" (python3 may be a Store stub that fails)
+PY="$(command -v python3 2>/dev/null || true)"
+if [ -z "$PY" ] || ! "$PY" -c "import sys" >/dev/null 2>&1; then PY="$(command -v python 2>/dev/null || command -v py 2>/dev/null || true)"; fi
+if [ -z "$PY" ]; then
+  # Git Bash PATH may miss Python even when Windows has it: try the usual install folders
+  for p in /c/Python3*/python.exe /c/Users/*/AppData/Local/Programs/Python/Python3*/python.exe "/c/Program Files/Python3"*/python.exe; do
+    if [ -f "$p" ]; then PY="$p"; break; fi
+  done
+fi
+if [ -z "$PY" ]; then echo "Python 3 is not found in Git Bash or its usual install folders. Install Python 3 and run this again." >&2; exit 1; fi
+# Git Bash PATH may also miss gh: look in the usual install folders and add it
+if ! command -v gh >/dev/null 2>&1; then
+  for d in "/c/Program Files/GitHub CLI" "/c/Program Files (x86)/GitHub CLI" "${LOCALAPPDATA:-/nonexistent}/Programs/GitHub CLI" "/c/Users/${USERNAME:-}/AppData/Local/Programs/GitHub CLI"; do
+    if [ -f "$d/gh.exe" ]; then export PATH="$d:$PATH"; break; fi
+  done
+fi
+if ! command -v gh >/dev/null 2>&1; then
+  echo "gh (GitHub CLI) is not found in Git Bash or in its usual install folders. Install it from https://cli.github.com, then run this again." >&2
   exit 1
 fi
-cfg() { python3 -c "import json,sys;d=json.load(open('distribution.json'));print(eval(sys.argv[1]))" "$1"; }
+# Check github.com only, and show gh's own message if it fails (a broken second host would fail a bare "gh auth status")
+if ! gh auth status --hostname github.com; then
+  echo "gh is not logged in to github.com. Run: gh auth login (see distribution.md), then run this again." >&2
+  exit 1
+fi
+cfg() { "$PY" -c "import json,sys;d=json.load(open('distribution.json'));print(eval(sys.argv[1]))" "$1"; }
 flag() { [ "$(cfg "d['targets']['$1']")" = "True" ]; }
 signing="$(cfg "d.get('signing','cosign')")"
 releases="${RELEASES_REPO:-$(cfg "d.get('releases_repo','')")}"
@@ -69,7 +90,14 @@ fi
 # 4. Windows Inno Setup (ISCC found or installed in the preflight above; Windows only). It writes straight into release/.
 if [ -n "$iscc" ]; then
   # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
-  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppName=$name" "/DMyAppVersion=$pkgver" packaging/installer.iss
+  # Pass the same defines to every .iss: MyAppName/MyAppVersion (template) and AppName/AppVersion/SourceDir (projects with their own script).
+  # ISCC ignores defines a script does not use.
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppName=$name" "/DMyAppVersion=$pkgver" \
+    "/DAppName=$name" "/DAppVersion=$pkgver" "/DSourceDir=../build/dist" packaging/installer.iss
+  # Some scripts write to a folder other than release/. Move any new setup .exe into release/.
+  for f in out/*setup*.exe ../out/*setup*.exe; do
+    [ -f "$f" ] && mv -f "$f" "$out/$name-$pkgver-windows-setup.exe" && break
+  done
 fi
 
 # 4b. uv deploy bundle: the source at this commit, with scripts/uv-deploy.sh inside

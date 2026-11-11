@@ -75,6 +75,10 @@ Fill in every line. The setup agent writes these from the user's answers. Never 
 ## Build location
 - `github` (default): GitHub Actions builds, checksums, signs and publishes on every push to main. Artifacts pass between jobs and are kept by GitHub for the retention period.
 - `local`: nothing runs in Actions. On Windows the user runs `scripts\release_local.bat` (it calls the .sh through Git Bash). On Linux or macOS they run `scripts/release_local.sh`. Either one builds the selected artifacts, checksums and signs them (with cosign locally, only `SHA256SUMS` is signed, so one browser sign-in per run covers every artifact by checksum; `cosign-all` in the script signs each file instead), and publishes with `gh release create` to `releases_repo` in `distribution.json`. Needs: PyInstaller, `zip` (Node), `dpkg-deb` (.deb, Linux), Inno Setup 6 (installer, Windows; `release_local.sh` installs it with winget or choco when it is missing), cosign or openssl, and `gh` logged in (or `GH_TOKEN` set). Build only on the matching OS: `.exe` and Inno on Windows, `.sh` and `.deb` on Linux.
+- Windows local runs need Git for Windows' bash (next to `git.exe`, or under Program Files or `%LOCALAPPDATA%\Programs\Git`). The launcher never uses a bare `bash`, because on many PCs that is WSL's `System32\bash.exe`, which cannot run the script. The run prints which bash it uses.
+- `release_local.sh` looks for Python (`python3`, then `python`, then `py`) and for `gh` in the usual Windows install folders, because Git Bash's PATH can miss them.
+- `.gitattributes` keeps `*.sh` files as LF. CRLF endings break `set -o pipefail` in Git Bash.
+- These fixes came from a real Windows local run, not from a dry run.
 - The releases repo fields: `releases_repo` in `distribution.json`, or the `RELEASES_REPO` env var for local runs.
 
 ## Git on the local machine
