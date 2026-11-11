@@ -22,6 +22,9 @@ case "$mode" in
       cosign sign-blob --yes --bundle "$f.bundle" "$f"
     done < <(signable)
     ;;
+  cosign-sums)  # one signature for SHA256SUMS only; it covers every artifact by checksum
+    cosign sign-blob --yes --bundle "$dir/SHA256SUMS.bundle" "$dir/SHA256SUMS"
+    ;;
   ed25519)
     : "${RELEASE_SIGNING_KEY:?set the RELEASE_SIGNING_KEY secret (PEM private key)}"
     keyfile="$(mktemp)"
