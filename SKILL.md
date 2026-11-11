@@ -37,6 +37,13 @@ Ask about each artifact separately. Only the ones the user says yes to are built
 
 Default: only the Windows .exe is on. Each option is a separate choice, and the workflow builds only the ones marked `true`.
 
+**Q4b. Where do builds run?**
+Ask this before the signing question.
+- **GitHub** (default, `"build_location": "github"`): Actions builds, checksums, signs and publishes on every push to main. Pro: fully automatic, same machine every time, no local tools. Con: needs GitHub minutes and a secret for the releases repo. The Windows installer needs a Windows runner.
+- **Local** (`"build_location": "local"`): run `scripts/release_local.sh` on the user's machine. Pro: no CI setup and no minutes used, and you can test a build before publishing. Con: manual, and each OS builds only its own packages.
+
+When local is chosen, skip the Actions secret and the workflow steps, and tell the user to run the script on each OS they build for. Record the choice in `distribution.md`.
+
 **Q5. Checksums and signing**
 SHA256SUMS is always written. Signing is required, and the user picks one of these two. Record the choice as `signing` in `distribution.json`.
 - **cosign** (default, `"signing": "cosign"`): Sigstore keyless signing. Pro: no key to store or lose, and the signature is tied to the GitHub workflow identity. Con: needs `id-token: write` and verification needs the cosign tool.
@@ -70,6 +77,8 @@ The Python spec needs its entry point and any built frontend filled in. Fill in 
 The `test/samples/` folder has a HelloWorld app for node, python-uv, flask, streamlit and fastapi. Use them to check the templates before a real project.
 
 ## Step 3: Set up GitHub Actions for every merge
+
+Only for `build_location: github`. For local builds, skip this step and give the user the `scripts/release_local.sh` run instructions from `distribution.md`.
 
 Walk the user through this, one step at a time. Wait for confirmation before the next step.
 

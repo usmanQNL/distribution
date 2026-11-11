@@ -13,7 +13,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      location: ${{ steps.loc.outputs.location }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read build location
+        id: loc
+        shell: bash
+        run: |
+          loc=$(python3 -c "import json;print(json.load(open('distribution.json')).get('build_location','github'))")
+          echo "location=$loc" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: config
+    if: needs.config.outputs.location == 'github'
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -73,7 +88,8 @@ jobs:
           path: release/*
 
   publish:
-    needs: build
+    needs: [config, build]
+    if: needs.config.outputs.location == 'github'
     runs-on: ubuntu-latest
     permissions:
       contents: read

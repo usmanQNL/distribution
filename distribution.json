@@ -8,5 +8,7 @@
     "linux_deb": false,
     "node_spa_zip": false,
     "uv_deploy": false
-  }
+  },
+  "build_location": "github",
+  "releases_repo": "usmanQNL/distribution-test"
 }

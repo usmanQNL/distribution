@@ -1,6 +1,6 @@
 # distribution skill
 
-A shareable Claude skill that sets up release builds for a Python, Node or mixed codebase. Every merge to main builds artifacts, writes SHA256 checksums, signs them with cosign (Sigstore) or Ed25519, chosen in setup, and publishes a GitHub release to a separate public releases repository.
+A shareable Claude skill that sets up release builds for a Python, Node or mixed codebase. Every merge to main builds artifacts (on GitHub, or locally with `scripts/release_local.sh`), writes SHA256 checksums, signs them with cosign (Sigstore) or Ed25519, chosen in setup, and publishes a GitHub release to a separate public releases repository.
 
 ## What it produces
 

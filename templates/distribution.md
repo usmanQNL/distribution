@@ -26,6 +26,7 @@ On every push to `main` (and on manual run), GitHub Actions builds the selected 
 | Linux .deb | off by default | on/off |
 | Node SPA zip | off by default | on/off |
 | uv deploy | off by default (no build) | on/off |
+| Build location | `github` (default) | `github` (Actions builds, signs, publishes) or `local` (run `scripts/release_local.sh` on this machine) |
 | Signing | `cosign` (default) | `cosign` or `ed25519` |
 | Trigger | every merge to main, plus manual run | |
 | Publish | separate public releases repo | |
@@ -34,10 +35,16 @@ On every push to `main` (and on manual run), GitHub Actions builds the selected 
 ## Repos, secrets, folders (as used in this project)
 - Skill source: `usmanQNL/distribution` (local: `C:\development\claudeCode\skills\distribution`).
 - Releases repo for tests: `usmanQNL/distribution-test` (must not be empty: it needs at least one commit before a release can be created).
-- Repo variable (optional): `RELEASES_REPO` = `<owner>/<releases-repo>`. If unset, the workflow uses `<repo>-releases`.
+- `distribution.json` field `releases_repo` (used by local runs): `usmanQNL/distribution-test` in the test project.
+- Repo variable (optional, GitHub runs): `RELEASES_REPO` = `<owner>/<releases-repo>`. If unset, the workflow uses `<repo>-releases`.
 - Repo secret: `RELEASES_REPO_TOKEN`. A fine-grained token: resource owner `usmanQNL`, repository access selected to the releases repo only, Contents read and write. Created on GitHub under Settings, Developer settings, Personal access tokens, Fine-grained tokens. Never commit it or paste it in chat.
 - Repo secret (ed25519 only): `RELEASE_SIGNING_KEY`, the whole PEM private key.
 - Local QuellDAP working folder (the source project for the first real use): `C:\development\claudeCode\quelldap`.
+
+## Build location
+- `github` (default): GitHub Actions builds, checksums, signs and publishes on every push to main. Artifacts pass between jobs and are kept by GitHub for the retention period.
+- `local`: nothing runs in Actions. The user runs `scripts/release_local.sh` on this machine, which builds the selected artifacts, checksums and signs them, and publishes with `gh release create` to `releases_repo` in `distribution.json`. Needs: PyInstaller, `zip` (Node), `dpkg-deb` (.deb, Linux), Inno Setup 6 (installer, Windows), cosign or openssl, and `gh` logged in (or `GH_TOKEN` set). Build only on the matching OS: `.exe` and Inno on Windows, `.sh` and `.deb` on Linux.
+- The releases repo fields: `releases_repo` in `distribution.json`, or the `RELEASES_REPO` env var for local runs.
 
 ## Setup steps (do these in order)
 1. Run `scripts/detect.sh <project-dir>` to get the language and framework.
