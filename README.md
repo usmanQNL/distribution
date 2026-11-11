@@ -24,6 +24,17 @@ Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-depl
 
 For local releases (`scripts/release_local.sh`, or `scripts\release_local.bat` on Windows), the script first checks for the GitHub CLI (`gh`) and installs it if it is missing (winget or choco on Windows, brew on macOS, the official apt repo or dnf, pacman or zypper on Linux). It then checks that `gh` is logged in and starts `gh auth login` if it is not (or set `GH_TOKEN`). When the Windows installer is chosen it does the same for Inno Setup.
 
+### Ed25519 signing: set RELEASE_SIGNING_KEY
+
+If you chose Ed25519 signing, set `RELEASE_SIGNING_KEY` to your private key, `root-private.pem` (the key whose public half is `packaging/keys/release-signing-public.pem`):
+
+- **GitHub builds:** add a repo secret named `RELEASE_SIGNING_KEY` (Settings, Secrets and variables, Actions) and paste in the whole contents of `root-private.pem`, from `-----BEGIN PRIVATE KEY-----` to `-----END PRIVATE KEY-----`. A secret holds text, not a file path.
+- **Local builds:** `export RELEASE_SIGNING_KEY="$HOME/keys/root-private.pem"` (a path to the file, or its contents).
+
+The release checks the key before it builds anything: it must be set, be an Ed25519 private key, and match the committed public key. On `main` a missing or wrong key stops the run straight away; on pull requests a missing key is only a warning, because pull requests from forks get no secrets. You can run the same check yourself with `bash scripts/sign.sh - check-key packaging/keys/release-signing-public.pem`.
+
+Keep `root-private.pem` outside the repo. `.gitignore` already ignores `*-private.pem`, but a key that never sits in the working tree cannot be committed by mistake.
+
 ## Layout
 
 - `SKILL.md`: the instructions Claude follows

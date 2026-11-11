@@ -13,7 +13,7 @@ Written by `scripts/generate.sh`. Every file is listed so an agent can find it w
 - `packaging/app.spec`: PyInstaller spec. It reads `NAME` from `app_name` in `distribution.json`, so the build is `build/dist/<app_name>.exe` (Windows) or `build/dist/<app_name>` (Linux). `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root. PyInstaller writes to `build/dist/`, apart from a frontend's `dist/`.
 - `packaging/installer.iss`: Inno Setup script. Used only when `windows_inno_installer` is true. Its paths are relative to `packaging/`, so the exe is `..\build\dist\<app_name>.exe`. The workflow passes `MyAppName` (`app_name`) and `MyAppVersion`.
 - `scripts/checksums.sh`: writes `SHA256SUMS`.
-- `scripts/sign.sh`: signs with cosign or ed25519.
+- `scripts/sign.sh`: signs with cosign or ed25519. `sign.sh - check-key [public.pem]` only checks `RELEASE_SIGNING_KEY`; the workflow and `release_local.sh` run it before building.
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`: Linux `.sh` installer and `.deb` package.
 - `scripts/ensure_gh.sh`: finds the GitHub CLI (`gh`), which local releases publish with, and installs it when it is missing: winget or choco on Windows, brew on macOS, the official GitHub CLI apt repo on Debian and Ubuntu, or dnf, pacman or zypper. `release_local.sh` runs it first, then checks `gh auth status` and starts `gh auth login` in a terminal if you are not logged in (or set `GH_TOKEN`). `bash scripts/ensure_gh.sh --check` only looks.
 - `scripts/ensure_iscc.sh`: finds ISCC.exe, the Inno Setup 6 compiler, and installs Inno Setup when it is missing (winget, or choco; choco first on the GitHub runner). Used only when `windows_inno_installer` is true, by the workflow's installer step and by `release_local.sh` before it builds anything. `bash scripts/ensure_iscc.sh --check` only looks. Inno Setup runs only on Windows, so on Linux or macOS it explains that and exits.
@@ -109,7 +109,7 @@ openssl genpkey -algorithm ed25519 -out release-signing-private.pem
 mkdir -p packaging/keys
 openssl pkey -in release-signing-private.pem -pubout -out packaging/keys/release-signing-public.pem
 ```
-Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` secret, then keep or delete the local copy. Never commit it.
+Commit only the public key. Put the whole private file into the `RELEASE_SIGNING_KEY` secret (its contents, not a path), then keep or delete the local copy. Never commit it. For a local run, `export RELEASE_SIGNING_KEY=<path to the private file>` (or its contents). Both the workflow and `release_local.sh` check the key before building: `bash scripts/sign.sh - check-key packaging/keys/release-signing-public.pem` runs the same check (set, Ed25519, matches the public key).
 
 ## Verify a release
 - Checksums: `sha256sum -c SHA256SUMS`

@@ -109,6 +109,18 @@ grep -q 'scripts/ensure_gh.sh' scripts/release_local.sh && ok "release_local.sh 
 if command -v gh >/dev/null 2>&1; then [ "$(bash scripts/ensure_gh.sh --check)" = "$(command -v gh)" ] && ok "ensure_gh.sh --check finds gh" || bad "ensure_gh.sh --check must print the gh path"; fi
 if grep -qiE 'where bash|set "BASH=bash"' scripts/release_local.bat; then bad "release_local.bat must not fall back to a bare bash (WSL)"; else ok "release_local.bat never uses a bare bash"; fi
 grep -q "where git" scripts/release_local.bat && grep -q 'bin\\bash.exe' scripts/release_local.bat && ok "release_local.bat finds Git's bash.exe from git.exe" || bad "release_local.bat must find bash.exe next to git.exe"
+# RELEASE_SIGNING_KEY is checked before the build, and sign.sh check-key catches a missing, wrong or mismatched key
+grep -q 'check-key' templates/release.yml && grep -q 'check-key' scripts/release_local.sh && ok "signing key is checked before the build" || bad "the workflow and release_local.sh must run sign.sh check-key"
+k="$t/keys"; mkdir -p "$k"
+openssl genpkey -algorithm ed25519 -out "$k/a-private.pem" 2>/dev/null && openssl pkey -in "$k/a-private.pem" -pubout -out "$k/a-public.pem"
+openssl genpkey -algorithm ed25519 -out "$k/b-private.pem" 2>/dev/null
+( unset RELEASE_SIGNING_KEY; bash scripts/sign.sh - check-key >/dev/null 2>&1 ) && bad "check-key must fail when RELEASE_SIGNING_KEY is unset" || ok "check-key fails when the key is unset"
+RELEASE_SIGNING_KEY="$(cat "$k/a-private.pem")" bash scripts/sign.sh - check-key "$k/a-public.pem" >/dev/null && ok "check-key accepts the key contents" || bad "check-key must accept the PEM contents"
+RELEASE_SIGNING_KEY="$k/a-private.pem" bash scripts/sign.sh - check-key "$k/a-public.pem" >/dev/null && ok "check-key accepts a key file path" || bad "check-key must accept a path"
+RELEASE_SIGNING_KEY="$k/b-private.pem" bash scripts/sign.sh - check-key "$k/a-public.pem" >/dev/null 2>&1 && bad "check-key must reject a key that does not match the public key" || ok "check-key rejects a mismatched key"
+RELEASE_SIGNING_KEY="not a key" bash scripts/sign.sh - check-key >/dev/null 2>&1 && bad "check-key must reject text that is not a key" || ok "check-key rejects text that is not a key"
+s="$t/signme"; mkdir -p "$s"; echo hi > "$s/a.txt"
+RELEASE_SIGNING_KEY="$k/a-private.pem" bash scripts/sign.sh "$s" ed25519 "$k/a-public.pem" >/dev/null && [ -f "$s/a.txt.sig" ] && ok "ed25519 signs with a key path" || bad "ed25519 signing with a key path"
 grep -q 'get("app_name")' templates/app.spec && ok "spec reads app_name" || bad "templates/app.spec must read NAME from app_name"
 grep -q '^APP=app$' scripts/install-linux.sh && ok "install helper has the APP=app line the build replaces" || bad "install-linux.sh needs an APP=app line"
 p="$t/pkg"; mkdir -p "$p/src"; echo hi > "$p/src/demo"

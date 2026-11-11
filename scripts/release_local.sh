@@ -38,6 +38,11 @@ major="$(tr -d '[:space:]' < VERSION)"; stamp="$(date -u +%Y%m%d_%H%M)"
 ver="v$major.$stamp"              # release tag, same scheme as the workflow
 pkgver="$major.${stamp/_/}"       # package version for .deb, .sh and the installer
 out="$root/release"; rm -rf "$out"; mkdir -p "$out"
+# Ed25519 signing: check RELEASE_SIGNING_KEY now, before the long build (the key text, or a path such as root-private.pem)
+if [ "$signing" = ed25519 ]; then
+  pubkey=""; [ -f packaging/keys/release-signing-public.pem ] && pubkey=packaging/keys/release-signing-public.pem
+  bash scripts/sign.sh - check-key $pubkey || { echo "stopping: set RELEASE_SIGNING_KEY first, for example: export RELEASE_SIGNING_KEY=\"\$HOME/keys/root-private.pem\"" >&2; exit 1; }
+fi
 # Inno Setup installer: find ISCC now, before the long build, and install Inno Setup 6 if it is missing (Windows only)
 iscc=""
 if flag windows_inno_installer; then

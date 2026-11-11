@@ -115,7 +115,7 @@ Walk the user through this, one step at a time. Wait for confirmation before the
      mkdir -p packaging/keys
      openssl pkey -in release-signing-private.pem -pubout -out packaging/keys/release-signing-public.pem
      ```
-     Commit `packaging/keys/release-signing-public.pem`. Add the private file to the repo secrets as `RELEASE_SIGNING_KEY` (paste the whole PEM contents), then delete the local private file or keep it somewhere safe. Never commit it.
+     Commit `packaging/keys/release-signing-public.pem`. Add the private file to the repo secrets as `RELEASE_SIGNING_KEY` (paste the whole PEM contents), then delete the local private file or keep it somewhere safe. Never commit it. The workflow checks the secret before it builds (set, Ed25519, matches the public key) and stops a release from main if it is missing or wrong. For local builds, have the user `export RELEASE_SIGNING_KEY=<path to the private file>`, and check it with `bash scripts/sign.sh - check-key packaging/keys/release-signing-public.pem`.
 5. **Turn on branch protection for main.** The release workflow runs its build jobs on every pull request (it publishes only from main). Require `build (ubuntu-latest)` and `build (windows-latest)` to pass before merge, and `docker` too if Docker was chosen, so a broken build cannot merge.
 5b. **Docker only: nothing to create.** The workflow pushes with its own `GITHUB_TOKEN` (`packages: write`), so no secret is needed. After the first merge, the image is under the repo's Packages. GHCR makes a new package private; to let anyone pull it, open the package, Package settings, Change visibility, Public.
 6. **Trigger the first run.** Merge a small change to main, or use the Actions tab, Run workflow. Open the run and check each job is green.

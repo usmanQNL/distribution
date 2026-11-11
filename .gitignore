@@ -11,6 +11,7 @@ __pycache__/
 node_modules/
 # Signing material: never commit private keys
 *-private.pem
+root-private.pem
 release-signing-private.pem
 packaging/keys/*private*
 *.exe
