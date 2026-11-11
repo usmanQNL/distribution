@@ -39,7 +39,7 @@ For local releases (`scripts/release_local.sh`, or `scripts\release_local.bat` o
 - `scripts/prune_releases.sh`: opt-in deletion of old releases
 - `scripts/ensure_gh.sh`: finds the GitHub CLI or installs it (winget or choco on Windows, brew on macOS, apt, dnf, pacman or zypper on Linux), used by local releases, which publish with `gh` (`--check` only looks)
 - `scripts/ensure_iscc.sh`: finds ISCC or installs Inno Setup 6, used only when the Windows installer is chosen (`--check` only looks)
-- `scripts/release_local.sh`, `scripts/release_local.bat`: local builds
+- `scripts/release_local.sh`, `scripts/release_local.bat`: local builds. On Windows the .bat runs the .sh with Git's own `bash.exe`, found from `git.exe` (per-user installs too), never a bare `bash`, which may be WSL's
 - `scripts/test_skill.sh`: the skill's own checks, run in CI
 - `scripts/check_dco.sh`: the DCO sign-off check, run in CI on every pull request, repo-only (not copied into projects)
 - `test/samples/`: HelloWorld apps for node, python-uv, flask, streamlit and fastapi

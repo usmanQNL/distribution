@@ -120,6 +120,7 @@ Commit only the public key. Put the private file into the `RELEASE_SIGNING_KEY` 
 
 ## Known gotchas (learned the hard way)
 - PyInstaller resolves `ENTRY` relative to the spec's folder (`packaging/`).
+- On Windows a bare `bash` is often WSL's `bash.exe` from `Windows\System32`, which cannot run the release script. `release_local.bat` finds Git's own `bash.exe` from where `git.exe` is (so per-user Git installs work), then the usual Git folders, and never falls back to a bare `bash`.
 - Git Bash rewrites arguments that start with `/` into Windows paths, so ISCC sees `/DMyAppVersion=...` as a second script ("You may not specify more than one script filename"). Run ISCC with `MSYS_NO_PATHCONV=1`.
 - The publish job must check out the repo, or `scripts/` is missing.
 - The publish job waits for the `docker` job. When Docker is off that job is skipped, so publish uses `!cancelled()` and accepts `skipped`; without that, GitHub would skip publish too.

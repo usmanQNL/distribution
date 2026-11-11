@@ -134,5 +134,6 @@ Local checks, when possible: `pyinstaller --noconfirm --distpath build/dist --wo
 
 - Ask before assuming. Q0 to Q4 are always asked.
 - Keep each script small. Automate the rest.
+- On Windows, run the skill's `.sh` scripts with Git's own `bash.exe` (in the `bin` folder of the Git install that `where git` points to), or from a Git Bash window. Never call a bare `bash` from cmd or PowerShell: it is often WSL's bash from `Windows\System32`, which runs in Linux and cannot see Windows tools such as ISCC or winget.
 - Never write secrets into the repo. Use GitHub Actions secrets such as `RELEASES_REPO_TOKEN`.
 - Never include a model name in generated commit messages or artifacts.

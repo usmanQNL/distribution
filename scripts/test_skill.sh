@@ -107,6 +107,8 @@ if [ "$(uname -s)" = Linux ]; then
 fi
 grep -q 'scripts/ensure_gh.sh' scripts/release_local.sh && ok "release_local.sh finds or installs gh" || bad "release_local.sh must call scripts/ensure_gh.sh"
 if command -v gh >/dev/null 2>&1; then [ "$(bash scripts/ensure_gh.sh --check)" = "$(command -v gh)" ] && ok "ensure_gh.sh --check finds gh" || bad "ensure_gh.sh --check must print the gh path"; fi
+if grep -qiE 'where bash|set "BASH=bash"' scripts/release_local.bat; then bad "release_local.bat must not fall back to a bare bash (WSL)"; else ok "release_local.bat never uses a bare bash"; fi
+grep -q "where git" scripts/release_local.bat && grep -q 'bin\\bash.exe' scripts/release_local.bat && ok "release_local.bat finds Git's bash.exe from git.exe" || bad "release_local.bat must find bash.exe next to git.exe"
 grep -q 'get("app_name")' templates/app.spec && ok "spec reads app_name" || bad "templates/app.spec must read NAME from app_name"
 grep -q '^APP=app$' scripts/install-linux.sh && ok "install helper has the APP=app line the build replaces" || bad "install-linux.sh needs an APP=app line"
 p="$t/pkg"; mkdir -p "$p/src"; echo hi > "$p/src/demo"
