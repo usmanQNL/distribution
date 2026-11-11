@@ -69,7 +69,7 @@ After the answers are saved in `distribution.json`:
    - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one. Set the `targets` flags from the answers.
    - `packaging/app.spec` and `packaging/installer.iss`, unless the project already has them
 3. Copy `scripts/checksums.sh` and `scripts/sign.sh` into the project's `scripts/` folder. The release workflow calls them.
-4. Write the answers and repo details into the project's `distribution.md` (copied from `templates/distribution.md`). Keep it current whenever an answer changes. It is the agent-neutral record, so a new agent from any provider can run the release cycle from it.
+4. Write the answers and repo details into the project's `distribution.md` (copied from `templates/distribution.md`). Fill in every `<fill in>` cell: the answers, the repos, the secrets' status and the local folder. Never write a token or key value. Keep it current whenever an answer changes. It is the agent-neutral record, so a new agent from any provider can run the release cycle from it. A record with any `<fill in>` left is not finished.
 5. Tell the user which files were written and what to commit. The user commits and pushes; this skill does not push.
 
 The Python spec needs its entry point and any built frontend filled in. Fill in `ENTRY` and `DATAS` for the project.

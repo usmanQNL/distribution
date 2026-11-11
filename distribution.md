@@ -6,41 +6,53 @@ Read this file first if you are asked to build, sign or publish release artifact
 On every push to `main` (and on manual run), GitHub Actions builds the selected artifacts, writes `SHA256SUMS`, signs them, and publishes a GitHub release to a separate public releases repository.
 
 ## Files in this project
-- `distribution.json`: the answers. Language, entry point, selected artifacts, signing mode. Edit this to change what is built.
-- `.github/workflows/release.yml`: the workflow. Do not edit unless changing the pipeline.
+Written by `scripts/generate.sh`. Every file is listed so an agent can find it without reading the scripts.
+- `distribution.json`: the answers in machine form. The scripts read it. Edit it to change what is built.
+- `distribution.md`: this file. It holds the human-readable record of the same answers.
+- `.github/workflows/release.yml`: the GitHub Actions workflow. Do not edit unless changing the pipeline.
 - `packaging/app.spec`: PyInstaller spec. `ENTRY` is relative to `packaging/`, so use `../` for paths from the repo root.
-- `packaging/installer.iss`: Inno Setup script, used only when `windows_inno_installer` is true.
-- `templates/install-linux.sh` (copied to the release as `install-linux.sh` when a Linux installer is selected): installs the app for the user, or system-wide with `--system`.
+- `packaging/installer.iss`: Inno Setup script. Used only when `windows_inno_installer` is true.
+- `scripts/checksums.sh`: writes `SHA256SUMS`.
+- `scripts/sign.sh`: signs with cosign or ed25519.
+- `scripts/make_sh.sh`, `scripts/make_deb.sh`: Linux `.sh` installer and `.deb` package.
+- `scripts/install-linux.sh`: installs the Linux release for a user, or system-wide with `--system`. Copied into each Linux release.
+- `scripts/uv-deploy.sh`: runs the app with uv on the target. Used only when `uv_deploy` is true.
+- `scripts/prune_releases.sh`: deletes old releases. Runs only from a manual workflow run with `prune_releases` ticked.
+- `scripts/release_local.sh` (Linux and macOS) and `scripts/release_local.bat` (Windows, calls the .sh through Git Bash): local builds. Used only when `build_location` is `local`.
 - `packaging/keys/release-signing-public.pem`: public key, only for `ed25519` signing. Never put the private key in the repo.
-- `scripts/checksums.sh`, `scripts/sign.sh`, `scripts/make_sh.sh`, `scripts/make_deb.sh`: build and signing helpers.
 - `VERSION`: the major version number. The release tag is `v<VERSION>.<yyyymmdd_hhmm>` in UTC.
+- `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to this file for each agent.
 
 ## Answers recorded at setup (edit `distribution.json` to change)
-| Question | Answer used | Options |
-|---|---|---|
-| Language | set per project | python, node, mix |
-| Python framework | set per project | flask, fastapi, streamlit, none |
-| Frontend bundling (Python + SPA) | bundle in the executable (recommended) | bundle, or ship beside |
-| Windows .exe | on by default | on/off |
-| Windows Inno Setup installer | off by default | on/off |
-| Linux .sh | off by default | on/off |
-| Linux .deb | off by default | on/off |
-| Node SPA zip | off by default | on/off |
-| uv deploy | off by default (no build) | on/off |
-| Build location | `github` (default) | `github` (Actions builds, signs, publishes) or `local` (run `scripts/release_local.bat` on Windows, or `scripts/release_local.sh` elsewhere) |
-| Signing | `cosign` (default) | `cosign` or `ed25519`. CI signs each file with cosign. Local `cosign` mode signs only `SHA256SUMS` (one sign-in per run), so verify local releases with `SHA256SUMS.bundle`. Use `cosign-all` in the script for per-file bundles. |
-| Trigger | every merge to main, plus manual run | |
-| Publish | separate public releases repo | |
-| Artifact retention | 7 days. GitHub runs delete their `release-*` build artifacts after a successful publish; failed runs keep them for a re-run. Local runs keep `dist/` and `build/`. Release pruning in the releases repo is opt-in (`prune_releases`). | |
+The setup agent fills in the "Answer" column from the user's answers and writes the same values into `distribution.json`. A cell that still reads `<fill in>` means the question has not been asked yet.
 
-## Repos, secrets, folders (as used in this project)
-- Skill source: `usmanQNL/distribution` (local: `C:\development\claudeCode\skills\distribution`).
-- Releases repo for tests: `usmanQNL/distribution-test` (must not be empty: it needs at least one commit before a release can be created).
-- `distribution.json` field `releases_repo` (used by local runs): `usmanQNL/distribution-test` in the test project.
-- Repo variable (optional, GitHub runs): `RELEASES_REPO` = `<owner>/<releases-repo>`. If unset, the workflow uses `<repo>-releases`.
-- Repo secret: `RELEASES_REPO_TOKEN`. A fine-grained token: resource owner `usmanQNL`, repository access selected to the releases repo only, Contents read and write. Created on GitHub under Settings, Developer settings, Personal access tokens, Fine-grained tokens. Never commit it or paste it in chat.
-- Repo secret (ed25519 only): `RELEASE_SIGNING_KEY`, the whole PEM private key.
-- Local QuellDAP working folder (the source project for the first real use): `C:\development\claudeCode\quelldap`.
+| # | Question | Answer | Options |
+|---|---|---|---|
+| Q1 | Language | <fill in> | Python only, Node only, Mix |
+| Q2 | Node is a single-page app (SPA)? (Node only) | <fill in> | Yes (static files), No (Node server) |
+| Q3 | Python framework and frontend | <fill in> | None, Flask/FastAPI bundled, Flask/FastAPI beside, uv deploy |
+| Q4 | Windows .exe (`windows_exe`) | <fill in> | true / false |
+| Q4 | Windows Inno Setup installer (`windows_inno_installer`) | <fill in> | true / false |
+| Q4 | Linux .sh (`linux_sh`) | <fill in> | true / false |
+| Q4 | Linux .deb (`linux_deb`) | <fill in> | true / false |
+| Q4 | Node SPA zip (`node_spa_zip`) | <fill in> | true / false |
+| Q4 | uv deploy (`uv_deploy`) | <fill in> | true / false |
+| Q4b | Build location (`build_location`) | <fill in> | github, local |
+| Q5 | Signing (`signing`) | <fill in> | cosign, ed25519 |
+| Q6 | Release trigger and publishing | <fill in> | Every merge to main to a releases repo; other options are not built into the template |
+| Q7 | Artifact retention (`artifact_retention_days`) | <fill in> | 7 (default), keep everything |
+| - | App name and entry point (`app_name`, `entry`) | <fill in> | |
+
+## Repos, secrets, folders (fill in for this project)
+Fill in every line. The setup agent writes these from the user's answers. Never write a token or key value here.
+
+- Project repo (where the code and workflow live): <fill in: owner/repo>
+- Releases repo (public, must have at least one commit): <fill in: owner/repo>, saved as `releases_repo` in `distribution.json`
+- Repo variable `RELEASES_REPO` (optional, GitHub runs): <fill in: owner/repo, or "not set" to use `<repo>-releases`>
+- Repo secret `RELEASES_REPO_TOKEN`: a fine-grained token with Contents read and write on the releases repo only. Created by the user on GitHub. Its value is never recorded here. Status: <fill in: added / not yet added>
+- Repo secret `RELEASE_SIGNING_KEY` (ed25519 only): the whole PEM private key. Its value is never recorded here. Status: <fill in: added / not needed>
+- Local working folder (for `build_location: local` only): <fill in: path on the user's machine, or "not used">
+- Git and gh on the local machine (local only): <fill in: installed and logged in / not checked>
 
 ## Build location
 - `github` (default): GitHub Actions builds, checksums, signs and publishes on every push to main. Artifacts pass between jobs and are kept by GitHub for the retention period.

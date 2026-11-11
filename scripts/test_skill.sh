@@ -32,6 +32,15 @@ grep -o 'scripts/[A-Za-z_.-]*\.sh' "$t/.github/workflows/release.yml" | sort -u 
   [ -f "$t/$s" ] && echo "ok: workflow calls $s" || { echo "FAIL: workflow calls missing $s" >&2; exit 1; }
 done || fail=1
 
+# 3b. The generated record is a fill-in template: placeholders present, no details from this skill's own project
+grep -q '<fill in' "$t/distribution.md" && ok "record has fill-in placeholders" || bad "record has no fill-in placeholders"
+grep -qi 'usmanQNL\|QuellDAP\|C:\\' "$t/distribution.md" && bad "record contains this skill's own project details" || ok "record has no project-specific details"
+# every script the skill ships is listed in the record
+for f in scripts/*.sh; do
+  b="$(basename "$f")"; [ "$b" = test_skill.sh ] && continue
+  grep -q "$b" "$t/distribution.md" && ok "record lists $b" || bad "record does not list $b"
+done
+
 # 4. Copies that must stay identical
 for pair in "distribution.md templates/distribution.md" "templates/release.yml .github/workflows/release.yml" \
             "templates/installer.iss packaging/installer.iss"; do
