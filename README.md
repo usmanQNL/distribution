@@ -6,8 +6,9 @@ A shareable Claude skill that sets up release builds for a Python, Node or mixed
 
 - Windows `.exe` (PyInstaller)
 - Linux `.sh` self-extracting installer and `.deb` package (built on Ubuntu runners)
-- A zipped SPA (`frontend-<version>.zip`) when the Node project has a `build` script
+- A zipped SPA (`app-<version>-frontend.zip`) when the Node project has a `build` script
 - A Windows installer (Inno Setup)
+- Every file named `app-<version>-<platform>`, for example `app-0.1.202611110638-windows.exe`
 - `SHA256SUMS` plus a signature for each file (cosign with certificate, or Ed25519)
 
 Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-deploy.sh`, shipped in a source bundle).

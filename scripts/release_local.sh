@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: release_local.sh  -> build, checksum, sign and publish on THIS machine (build_location = "local").
-# On Linux, also publishes install-linux.sh (installs the .deb or .sh for the user, or system-wide with --system).
+# On Linux, also publishes app-<version>-linux-install.sh (installs the .deb or .sh for the user, or system-wide with --system).
 # Needs: python3, pyinstaller (for exe/linux binary), zip (node), dpkg-deb (deb), cosign (cosign signing) or
 #        openssl (ed25519), and gh authenticated with the releases repo, or GH_TOKEN set.
 set -euo pipefail
@@ -31,7 +31,7 @@ out="$root/release"; rm -rf "$out"; mkdir -p "$out"
 if { flag node_spa_zip || [ "$bundle_frontend" = "True" ]; } && [ -f "$frontend_dir/package.json" ]; then
   (cd "$frontend_dir" && npm ci && npm run build)
   if flag node_spa_zip; then
-    (cd "$frontend_dir/$frontend_dist" && zip -qr "$out/frontend-$pkgver.zip" .)
+    (cd "$frontend_dir/$frontend_dist" && zip -qr "$out/app-$pkgver-frontend.zip" .)
   fi
 fi
 
@@ -39,7 +39,7 @@ fi
 if flag windows_exe || flag windows_inno_installer || flag linux_sh || flag linux_deb; then
   pyinstaller --noconfirm --distpath build/dist --workpath build/work packaging/app.spec
   case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) if flag windows_exe; then cp build/dist/app.exe "$out/"; fi ;;
+    MINGW*|MSYS*|CYGWIN*) if flag windows_exe; then cp build/dist/app.exe "$out/app-$pkgver-windows.exe"; fi ;;
   esac
 fi
 
@@ -49,7 +49,7 @@ if [ "$(uname -s)" = "Linux" ] && { flag linux_sh || flag linux_deb; }; then
   if flag linux_sh; then bash scripts/make_sh.sh "$src" "$out/app-$pkgver-linux.sh"; fi
   if flag linux_deb; then bash scripts/make_deb.sh "$src" app "$pkgver" "$out"; fi
   # Install script for Linux users, published alongside the installers
-  cp "$root/scripts/install-linux.sh" "$out/install-linux.sh"
+  cp "$root/scripts/install-linux.sh" "$out/app-$pkgver-linux-install.sh"
 fi
 
 # 4. Windows Inno Setup (needs Inno Setup 6 installed; run on Windows). It writes straight into release/.

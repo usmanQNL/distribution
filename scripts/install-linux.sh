@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Installs the app for the current user on Linux. Run from the folder with the release files:
-#   bash install-linux.sh            (installs to ~/.local/share/app, command in ~/.local/bin)
-#   sudo bash install-linux.sh --system   (installs to /opt/app, command in /usr/local/bin)
+#   bash app-<version>-linux-install.sh            (installs to ~/.local/share/app, command in ~/.local/bin)
+#   sudo bash app-<version>-linux-install.sh --system   (installs to /opt/app, command in /usr/local/bin)
 # Uses the .deb if present (system install with dpkg), otherwise the self-extracting .sh.
 set -euo pipefail
 APP=app
 here="$(cd "$(dirname "$0")" && pwd)"
 mode="${1:-user}"
 
-deb="$(ls "$here"/${APP}_*_amd64.deb 2>/dev/null | head -n1 || true)"
+deb="$(ls "$here"/${APP}-*-linux-amd64.deb 2>/dev/null | head -n1 || true)"
 sh_installer="$(ls "$here"/${APP}-*-linux.sh 2>/dev/null | head -n1 || true)"
 
 if [ "$mode" = "--system" ]; then
