@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      prune_releases:
+        description: "Delete releases in the releases repo older than artifact_retention_days (opt-in)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -87,6 +92,7 @@ jobs:
         with:
           name: release-${{ matrix.os }}
           path: release/*
+          retention-days: 7
 
   publish:
     needs: [config, build]
@@ -95,6 +101,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
@@ -125,3 +132,25 @@ jobs:
         run: |
           VERSION="v$(cat VERSION).$(date -u +%Y%m%d_%H%M)"
           gh release create "$VERSION" release/* --repo "${{ vars.RELEASES_REPO || format('{0}-releases', github.repository) }}" --title "$VERSION" --notes "Automated release from ${{ github.sha }}"
+
+  prune:
+    if: github.event_name == 'workflow_dispatch' && inputs.prune_releases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Delete old releases (opt-in)
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        shell: bash
+        run: |
+          days=$(python3 -c "import json;print(json.load(open('distribution.json')).get('artifact_retention_days',7))")
+          repo="${{ vars.RELEASES_REPO || format('{0}-releases', github.repository) }}"
+          bash scripts/prune_releases.sh "$repo" "$days"
+      - name: Delete build artifacts after a successful publish
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --paginate --jq '.artifacts[] | select(.name | startswith("release-")) | .id')
+          for id in $ids; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done

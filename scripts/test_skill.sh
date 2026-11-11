@@ -24,13 +24,22 @@ expect node        "language=node python_framework=none "
 t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT
 bash scripts/generate.sh "$t" >/dev/null
 for f in .github/workflows/release.yml distribution.json distribution.md packaging/app.spec packaging/installer.iss \
-         scripts/checksums.sh scripts/sign.sh scripts/make_sh.sh scripts/make_deb.sh scripts/install-linux.sh scripts/uv-deploy.sh; do
+         scripts/checksums.sh scripts/sign.sh scripts/make_sh.sh scripts/make_deb.sh scripts/prune_releases.sh scripts/install-linux.sh scripts/uv-deploy.sh; do
   [ -f "$t/$f" ] && ok "generated $f" || bad "generate did not write $f"
 done
 # every scripts/ path the generated workflow calls must exist in the output
 grep -o 'scripts/[A-Za-z_.-]*\.sh' "$t/.github/workflows/release.yml" | sort -u | while read -r s; do
   [ -f "$t/$s" ] && echo "ok: workflow calls $s" || { echo "FAIL: workflow calls missing $s" >&2; exit 1; }
 done || fail=1
+
+# 3b. The generated record is a fill-in template: placeholders present, no details from this skill's own project
+grep -q '<fill in' "$t/distribution.md" && ok "record has fill-in placeholders" || bad "record has no fill-in placeholders"
+grep -qi 'usmanQNL\|QuellDAP\|C:\\' "$t/distribution.md" && bad "record contains this skill's own project details" || ok "record has no project-specific details"
+# every script the skill ships is listed in the record
+for f in scripts/*.sh; do
+  b="$(basename "$f")"; [ "$b" = test_skill.sh ] && continue
+  grep -q "$b" "$t/distribution.md" && ok "record lists $b" || bad "record does not list $b"
+done
 
 # 4. Copies that must stay identical
 for pair in "distribution.md templates/distribution.md" "templates/release.yml .github/workflows/release.yml" \
