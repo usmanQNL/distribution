@@ -1,5 +1,5 @@
 {
-  "app_name": "app",
+  "app_name": "distribution",
   "entry": "test/samples/flask/app.py",
   "targets": {
     "windows_exe": true,

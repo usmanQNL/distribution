@@ -6,10 +6,10 @@ A shareable Claude skill that sets up release builds for a Python, Node or mixed
 
 - Windows `.exe` (PyInstaller)
 - Linux `.sh` self-extracting installer and `.deb` package (built on Ubuntu runners)
-- A zipped SPA (`app-<version>-frontend.zip`) when the Node project has a `build` script
+- A zipped SPA (`<name>-<version>-frontend.zip`) when the Node project has a `build` script
 - A Windows installer (Inno Setup)
-- A Docker image, if the user asks for one: the skill writes a `Dockerfile` and `.dockerignore`, every pull request builds the image, and every merge pushes it to GitHub Container Registry (`ghcr.io/<owner>/<repo>:<version>` and `:latest`), signed with cosign, with its digest in the release as `app-<version>-docker.txt`
-- Every file named `app-<version>-<platform>`, for example `app-0.1.202611110638-windows.exe`
+- A Docker image, if the user asks for one: the skill writes a `Dockerfile` and `.dockerignore`, every pull request builds the image, and every merge pushes it to GitHub Container Registry (`ghcr.io/<owner>/<repo>:<version>` and `:latest`), signed with cosign, with its digest in the release as `<name>-<version>-docker.txt`
+- Every file named `<name>-<version>-<platform>`, where `<name>` is the release name the user picks at setup (the project name by default), for example `acme-notes-1.202611110638-windows.exe`
 - `SHA256SUMS` plus a signature for each file (cosign with certificate, or Ed25519)
 
 Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-deploy.sh`, shipped in a source bundle).
@@ -28,8 +28,8 @@ Python projects can also deploy with uv instead of PyInstaller (`scripts/uv-depl
 - `distribution.md`: the agent-neutral guide (copied into each project)
 - `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to the guide
 - `templates/release.yml`: the GitHub Actions workflow
-- `templates/app.spec`, `templates/installer.iss`: PyInstaller spec (with placeholders for entry point and frontend) and Inno Setup script
 - `templates/Dockerfile.python`, `templates/Dockerfile.node`, `templates/dockerignore`: Docker files, copied only when the user picks Docker
+- `templates/app.spec`, `templates/installer.iss`: PyInstaller spec (with placeholders for entry point and frontend) and Inno Setup script, both named from `app_name`
 - `scripts/detect.sh`, `scripts/generate.sh`: detect the project and copy the templates
 - `scripts/checksums.sh`, `scripts/sign.sh`: SHA256SUMS and cosign signing
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`, `scripts/install-linux.sh`: Linux installer, package and install helper

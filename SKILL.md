@@ -11,6 +11,13 @@ Builds release artifacts on every merge to main and publishes them to a separate
 
 Ask these one at a time. For each question, give the options with a short pro and con, then recommend one. Wait for the answer before moving on. Record every answer in `distribution.json` at the repo root so the scripts can read it.
 
+**Q0. Release name**
+Ask what name the release files should carry. Every release file starts with it, for example `<name>-<version>-windows.exe` and `<name>-<version>-linux.sh`. It is also the name of the exe and the Linux command, the install folder and the Start menu entry. Record it as `app_name` in `distribution.json` and in the Q0 row of `distribution.md`.
+- **The project name** (default, recommended): `generate.sh` fills in the project folder name. Pro: matches the repo, nothing to remember. Con: a repo name such as `backend` may mean little to the people downloading it.
+- **A product name the user picks**, for example `acme-notes`. Pro: users see the name they know. Con: one more thing to change if the product is renamed.
+
+Use letters, digits, `.`, `_` and `-` only, with no spaces, starting with a letter or digit. The build stops on anything else. Lowercase is safest, since Linux commands are case sensitive (the `.deb` package name is lowercased either way).
+
 **Q1. Language of the codebase**
 - Python only (PyInstaller)
 - Node only (npm run build, then a package)
@@ -32,11 +39,11 @@ Ask about each artifact separately. Only the ones the user says yes to are built
 - **Windows installer** (`windows_inno_installer`): an Inno Setup setup file built from `packaging/installer.iss`. Pro: Start menu entry, uninstaller and a standard install. Con: needs the .exe too, and the build runs on a Windows runner.
 - **Linux .sh** (`linux_sh`): a self-extracting installer. Pro: runs on any distro. Con: a bit larger, since it bundles the app.
 - **Linux .deb** (`linux_deb`): a Debian or Ubuntu package. Pro: installs with apt or dpkg. Con: only for Debian-based systems.
-- **Node SPA zip** (`node_spa_zip`): the `npm run build` output zipped, once per release (`app-<version>-frontend.zip`). Pro: small and simple. Con: needs a server to serve it.
-- **uv deploy** (`uv_deploy`): no binary, the target runs the app with uv. The release gets `app-<version>-uv.tar.gz`, the source at that commit with `scripts/uv-deploy.sh` inside. Pro: no build step. Con: the target needs Python and uv, and the project needs a `pyproject.toml`.
-- **Docker image** (`docker`): a `Dockerfile` and `.dockerignore` for the project. Every pull request builds the image as a check. Every merge to main pushes it to GitHub Container Registry as `ghcr.io/<owner>/<repo>:<version>` and `:latest`, signs it with cosign (keyless), and adds `app-<version>-docker.txt` (the image digest) to the release. Pro: runs the same on any host with Docker, and suits servers. Con: the target needs Docker, the image is Linux amd64 only, and a new GHCR package starts private. Python and Mix projects get the Python file; Node projects get the Node file, which has a `spa` stage (nginx) and a `server` stage (`npm start`): keep the one that matches Q2 and delete the other.
+- **Docker image** (`docker`): a `Dockerfile` and `.dockerignore` for the project. Every pull request builds the image as a check. Every merge to main pushes it to GitHub Container Registry as `ghcr.io/<owner>/<repo>:<version>` and `:latest`, signs it with cosign (keyless), and adds `<app_name>-<version>-docker.txt` (the image digest) to the release. Pro: runs the same on any host with Docker, and suits servers. Con: the target needs Docker, the image is Linux amd64 only, and a new GHCR package starts private. Python and Mix projects get the Python file; Node projects get the Node file, which has a `spa` stage (nginx) and a `server` stage (`npm start`): keep the one that matches Q2 and delete the other.
+- **Node SPA zip** (`node_spa_zip`): the `npm run build` output zipped, once per release (`<app_name>-<version>-frontend.zip`). Pro: small and simple. Con: needs a server to serve it.
+- **uv deploy** (`uv_deploy`): no binary, the target runs the app with uv. The release gets `<app_name>-<version>-uv.tar.gz`, the source at that commit with `scripts/uv-deploy.sh` inside. Pro: no build step. Con: the target needs Python and uv, and the project needs a `pyproject.toml`.
 
-Every release file is named `app-<version>-<platform>[-<kind>].<ext>` (the list is in `distribution.md`, "Release file names").
+Every release file is named `<app_name>-<version>-<platform>[-<kind>].<ext>` (the list is in `distribution.md`, "Release file names").
 
 Default: only the Windows .exe is on. Each option is a separate choice, and the workflow builds only the ones marked `true`.
 
@@ -70,7 +77,7 @@ After the answers are saved in `distribution.json`:
 1. Run `scripts/detect.sh <project-dir>` to confirm the language and Python framework. It prints `language=` (node, python, mix) and `python_framework=` (flask, fastapi, streamlit or none).
 2. Run `scripts/generate.sh <project-dir>` to write:
    - `.github/workflows/release.yml`, copied from `templates/release.yml`
-   - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one. Set the `targets` flags and the frontend keys from the answers.
+   - `distribution.json`, copied from `templates/distribution.json`, unless the project already has one, with `app_name` set to the project folder name. Set `app_name` to the Q0 answer, and the `targets` flags and the frontend keys from the answers.
    - `packaging/app.spec` and `packaging/installer.iss`, unless the project already has them
    - `scripts/`: `checksums.sh`, `sign.sh`, `make_sh.sh`, `make_deb.sh`, `prune_releases.sh`, `install-linux.sh` and `uv-deploy.sh`. The workflow calls them.
    - `Dockerfile` and `.dockerignore`, only when `targets.docker` is true and the project has none yet: `templates/Dockerfile.python` for Python or Mix, `templates/Dockerfile.node` for Node. If `docker` was set to true after the first run, run `generate.sh` again; it keeps files that already exist.
@@ -111,7 +118,7 @@ Walk the user through this, one step at a time. Wait for confirmation before the
    - If cosign: `cosign verify-blob --bundle <file>.bundle --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com <file>`
    - If cosign and the release was made locally: only `SHA256SUMS` is signed, with the person's own identity. See "Verify a release" in `distribution.md`.
    - If ed25519: `openssl pkeyutl -verify -pubin -inkey packaging/keys/release-signing-public.pem -rawin -in <file> -sigfile <file>.sig`
-   - If Docker: `docker pull` the digest from `app-<version>-docker.txt`, then (cosign) `cosign verify ghcr.io/<owner>/<repo>@<digest> --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com`. With ed25519 the signed `app-<version>-docker.txt` vouches for the digest.
+   - If Docker: `docker pull` the digest from `<app_name>-<version>-docker.txt`, then (cosign) `cosign verify ghcr.io/<owner>/<repo>@<digest> --certificate-identity-regexp "https://github.com/<owner>/<repo>/" --certificate-oidc-issuer https://token.actions.githubusercontent.com`. With ed25519 the signed `<app_name>-<version>-docker.txt` vouches for the digest.
 
 For each step, the skill says what to click and what a green result looks like. If a step fails, the skill reads the log and suggests the fix. It does not guess at the secret name or token scope.
 
@@ -119,7 +126,7 @@ Local checks, when possible: `pyinstaller --noconfirm --distpath build/dist --wo
 
 ## Rules
 
-- Ask before assuming. Q1 to Q4 are always asked.
+- Ask before assuming. Q0 to Q4 are always asked.
 - Keep each script small. Automate the rest.
 - Never write secrets into the repo. Use GitHub Actions secrets such as `RELEASES_REPO_TOKEN`.
 - Never include a model name in generated commit messages or artifacts.
