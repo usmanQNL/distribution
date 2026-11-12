@@ -14,7 +14,7 @@ fi
 # The GitHub CLI publishes the release: find it, or install it (winget/choco, brew, apt/dnf/pacman/zypper)
 gh_bin="$(bash scripts/ensure_gh.sh)" || { echo "stopping: the GitHub CLI (gh) is needed to publish the release" >&2; exit 1; }
 PATH="$(dirname "$gh_bin"):$PATH"   # a fresh install may not be on this shell's PATH yet
-if [ -z "${GH_TOKEN:-}" ] && ! gh auth status >/dev/null 2>&1; then
+if [ -z "${GH_TOKEN:-}" ] && ! gh auth status --hostname github.com >/dev/null 2>&1; then
   if [ -t 0 ] && [ -t 1 ]; then
     echo "gh is not logged in. Starting: gh auth login (choose GitHub.com, HTTPS, Login with a web browser)" >&2
     gh auth login --hostname github.com --git-protocol https --web && gh auth setup-git \
@@ -24,7 +24,16 @@ if [ -z "${GH_TOKEN:-}" ] && ! gh auth status >/dev/null 2>&1; then
     exit 1
   fi
 fi
-cfg() { python3 -c "import json,sys;d=json.load(open('distribution.json'));print(eval(sys.argv[1]))" "$1"; }
+# Python: on Windows the command is often "py" (python3 may be a Store stub that fails). Try each, then the usual folders.
+PY="$(command -v python3 2>/dev/null || true)"
+if [ -z "$PY" ] || ! "$PY" -c "import sys" >/dev/null 2>&1; then PY="$(command -v python 2>/dev/null || command -v py 2>/dev/null || true)"; fi
+if [ -z "$PY" ]; then
+  for p in /c/Python3*/python.exe "/c/Users/${USERNAME:-}/AppData/Local/Programs/Python/"Python3*/python.exe "/c/Program Files/Python3"*/python.exe; do
+    if [ -f "$p" ]; then PY="$p"; break; fi
+  done
+fi
+if [ -z "$PY" ]; then echo "Python 3 is not found in Git Bash or its usual install folders. Install Python 3 and run this again." >&2; exit 1; fi
+cfg() { "$PY" -c "import json,sys;d=json.load(open('distribution.json'));print(eval(sys.argv[1]))" "$1"; }
 flag() { [ "$(cfg "d['targets']['$1']")" = "True" ]; }
 signing="$(cfg "d.get('signing','cosign')")"
 releases="${RELEASES_REPO:-$(cfg "d.get('releases_repo','')")}"
@@ -90,7 +99,14 @@ fi
 # 4. Windows Inno Setup (ISCC found or installed in the preflight above; Windows only). It writes straight into release/.
 if [ -n "$iscc" ]; then
   # Git Bash rewrites arguments that start with / into paths, which breaks /D; turn that off for ISCC
-  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppName=$name" "/DMyAppVersion=$pkgver" packaging/installer.iss
+  # Pass the same defines to every .iss: MyAppName/MyAppVersion (template) and AppName/AppVersion/SourceDir (projects with their own script).
+  # ISCC ignores defines a script does not use.
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$iscc" "/DMyAppName=$name" "/DMyAppVersion=$pkgver" \
+    "/DAppName=$name" "/DAppVersion=$pkgver" "/DSourceDir=../build/dist" packaging/installer.iss
+  # Some scripts write outside release/. Move any new setup .exe into release/.
+  for f in out/*setup*.exe ../out/*setup*.exe; do
+    [ -f "$f" ] && mv -f "$f" "$out/$name-$pkgver-windows-setup.exe" && break
+  done
 fi
 
 # 4b. uv deploy bundle: the source at this commit, with scripts/uv-deploy.sh inside
