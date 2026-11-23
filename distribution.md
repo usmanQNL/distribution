@@ -30,8 +30,7 @@ Written by `scripts/generate.sh`. Every file is listed so an agent can find it w
 - `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to this file for each agent.
 
 ## Release file names
-- `<app_name>-<version>-docker.txt`: the Docker image name, tag and digest (the image itself is in GHCR as `ghcr.io/<owner>/<repo>:<version>`)
-Every file in a release is named `<app_name>-<version>-<platform>[-<kind>].<ext>`, with `<app_name>` from `distribution.json` (the release name, asked at setup) and `<version>` = `<VERSION>.<yyyymmddhhmm>`. For example, with `app_name` set to `acme-notes`: `acme-notes-1.202611110638-windows.exe`. The build job fails on a file that does not follow it, on pull requests too.
+Every file in a release is named `<app_name>-<version>-<platform>[-<kind>].<ext>`, with `<app_name>` from `distribution.json` (the release name, asked at setup, the project folder name by default) and `<version>` = `<VERSION>.<yyyymmddhhmm>`. For example, with `app_name` set to `acme-notes`: `acme-notes-1.202611110638-windows.exe`. `app_name` may hold only letters, digits, `.`, `_` and `-`, starting with a letter or digit. The build job fails on a file that does not follow the pattern, on pull requests too.
 - `<app_name>-<version>-windows.exe`: the PyInstaller exe
 - `<app_name>-<version>-windows-setup.exe`: the Inno Setup installer
 - `<app_name>-<version>-linux.sh`: the self-extracting Linux installer
@@ -39,6 +38,7 @@ Every file in a release is named `<app_name>-<version>-<platform>[-<kind>].<ext>
 - `<app_name>-<version>-linux-install.sh`: the install helper (`scripts/install-linux.sh`)
 - `<app_name>-<version>-frontend.zip`: the built SPA
 - `<app_name>-<version>-uv.tar.gz`: the source bundle for uv deploy
+- `<app_name>-<version>-docker.txt`: the Docker image name, tag and digest (the image itself is in GHCR as `ghcr.io/<owner>/<repo>:<version>`)
 - `<app_name>-<version>-env.example`: the settings template, only when the app reads a `.env`. The user renames it to `.env`. It does not keep the plain name `.env.example` because GitHub renames release files that start with a dot.
 - `SHA256SUMS`, and a `.bundle` (cosign) or `.sig` (ed25519) next to each file: these keep their standard names so `sha256sum -c` and the verify commands work unchanged.
 
@@ -99,10 +99,8 @@ Fill in every line. The setup agent writes these from the user's answers. Never 
 - Where files go: only the Docker image goes to GHCR (`ghcr.io/<owner>/<repo>`, `:<version>` and `:latest`), only from `github` builds on a merge to main, signed with cosign (with ed25519, the signed `<app_name>-<version>-docker.txt` digest file covers it). A new GHCR package is private until made public in its package settings. The .exe, installer, .sh and .deb go to the releases repo as a GitHub Release with `SHA256SUMS` and signatures. Local runs never reach GHCR.
 - `github` (default): GitHub Actions builds, checksums, signs and publishes on every push to main. Artifacts pass between jobs and are kept by GitHub for the retention period.
 - `local`: nothing runs in Actions. On Windows the user runs `scripts\release_local.bat` (it calls the .sh through Git Bash). On Linux or macOS they run `scripts/release_local.sh`. Either one builds the selected artifacts, checksums and signs them (with cosign locally, only `SHA256SUMS` is signed, so one browser sign-in per run covers every artifact by checksum; `cosign-all` in the script signs each file instead), and publishes with `gh release create` to `releases_repo` in `distribution.json`. Needs: PyInstaller, `zip` (Node), `dpkg-deb` (.deb, Linux), Inno Setup 6 (installer, Windows; `release_local.sh` installs it with winget or choco when it is missing), cosign or openssl, and `gh` logged in (or `GH_TOKEN` set; `release_local.sh` installs `gh` when it is missing and starts the login when it is not logged in). Build only on the matching OS: `.exe` and Inno on Windows, `.sh` and `.deb` on Linux.
-- `.gitattributes` keeps `*.sh` files as LF. CRLF endings break `set -o pipefail` in Git Bash.
-- `release_local.sh` looks for Python as `python3`, then `python`, then `py`, and tries the usual Windows install folders. The Inno Setup run passes `AppName`, `AppVersion` and `SourceDir` as well as the template defines, and moves a new setup `.exe` into `release/`.
-- These Windows fixes came from a real local run.
-- The releases repo fields: `releases_repo` in `distribution.json`, or the `RELEASES_REPO` env var for local runs.
+- Local runs publish to `releases_repo` in `distribution.json`, or to the `RELEASES_REPO` environment variable when it is set.
+- Local runs on Windows (learned from a real run): keep `*.sh` files as LF by adding `*.sh text eol=lf` to the project's `.gitattributes`, since CRLF endings break `set -o pipefail` in Git Bash (`generate.sh` does not write this file). `release_local.sh` looks for Python as `python3`, then `python`, then `py`, and tries the usual Windows install folders. The Inno Setup run passes `AppName`, `AppVersion` and `SourceDir` as well as the template defines, and moves the new setup `.exe` into `release/`.
 
 ## Git on the local machine
 Local runs refuse to start unless git is installed and `gh` is logged in. If git is missing, the agent should offer to install it, and must not run the local release until it is installed.
@@ -110,7 +108,7 @@ Local runs refuse to start unless git is installed and `gh` is logged in. If git
 Install: Windows: `winget install --id Git.Git -e`, or the installer from https://git-scm.com. macOS: `xcode-select --install` or `brew install git`. Debian or Ubuntu: `sudo apt install git`.
 
 Log in (one time per machine):
-1. Install the GitHub CLI: `winget install --id GitHub.cli` (Windows), `brew install gh` (macOS), or `sudo apt install gh` (Debian or Ubuntu).
+1. Install the GitHub CLI: `bash scripts/ensure_gh.sh` finds it or installs it (winget or choco on Windows, brew on macOS, the official GitHub CLI apt repo on Debian and Ubuntu, or dnf, pacman or zypper), and `release_local.sh` runs it on its own. By hand: `winget install --id GitHub.cli` (Windows), `brew install gh` (macOS), or `sudo apt install gh` (Debian or Ubuntu).
 2. Log in: `gh auth login`. Choose GitHub.com, HTTPS, and "Login with a web browser". Copy the one-time code it shows, then press Enter to open the browser and paste it.
 3. Let git use the same login: `gh auth setup-git`.
 4. Set your identity for commits, if not set yet: `git config --global user.name "Your Name"` and `git config --global user.email "you@example.com"`.
@@ -121,13 +119,14 @@ Use a token instead of the browser (for scripts): `gh auth login --with-token` r
 ## Setup steps (do these in order)
 1. Run `scripts/detect.sh <project-dir>` to get the language and framework.
 2. Ask the user each question in the table above. Ask about each artifact separately. Record every answer in `distribution.json`.
-3. Run `scripts/generate.sh <project-dir>` to copy the workflow, config and this guide into the project.
-4. Commit and push the generated files. The user commits and pushes from their PC unless they ask otherwise.
+3. Run `scripts/generate.sh <project-dir>` to copy the workflow, config and this guide into the project. Set `app_name` and the answers in `distribution.json`, fill in `ENTRY` and `DATAS` in `packaging/app.spec`, and, for Docker, the `CMD` and `EXPOSE` lines in `Dockerfile`. If the app reads a `.env`, check `.env.example` (names only, no values).
+4. Commit and push the generated files, including `.env.example` but never `.env`. The user commits and pushes from their PC unless they ask otherwise.
 5. Create the releases repo (public). Add at least one commit to it.
 6. Create `RELEASES_REPO_TOKEN` as above and add it as a repo secret in the project repo.
 7. If `ed25519`: generate the key pair (below), commit the public key, add the private key as `RELEASE_SIGNING_KEY`.
-8. Run the workflow from the Actions tab (Run workflow) and check the run.
-9. Verify the release (below).
+8. Run the workflow from the Actions tab (Run workflow) and check the run. The Windows installer needs nothing installed first: the workflow installs Inno Setup when the runner lacks it.
+9. Docker only: after the first merge, the image is under the repo's Packages. Make the package public (Package settings, Change visibility) if anyone else should pull it.
+10. Verify the release (below).
 
 ### Ed25519 key pair
 ```

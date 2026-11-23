@@ -1,6 +1,6 @@
 ---
 name: distribution
-description: Use when the user wants release builds (Windows .exe, Linux .sh/.deb, a frontend bundle, or a Docker image) with SHA256 checksums and signatures (cosign or Ed25519), published on every merge via GitHub Actions. Asks setup questions first.
+description: Use when the user wants release builds (Windows .exe and installer, Linux .sh/.deb, a frontend bundle, a uv bundle, or a Docker image on GHCR) named <name>-<version>-<platform>, with SHA256 checksums and signatures (cosign or Ed25519), published on every merge via GitHub Actions or from a local run. Asks setup questions first.
 license: MIT OR Apache-2.0
 ---
 
@@ -97,6 +97,8 @@ After the answers are saved in `distribution.json`:
 
 The Python spec needs its entry point and any built frontend filled in. Fill in `ENTRY` and `DATAS` for the project.
 
+For local runs on Windows, have the user add `*.sh text eol=lf` to the project's `.gitattributes` (`generate.sh` does not write it). Git on Windows may otherwise check the scripts out with CRLF endings, which break them in Git Bash.
+
 If Docker was chosen, fill in the Dockerfile too: pick the `CMD` line for the framework (the template lists CLI, Flask, FastAPI and Streamlit) and set `EXPOSE`. For a Mix project with a bundled frontend, uncomment the `frontend` stage and its `COPY --from` line. For Node, delete the stage that does not match Q2. Check it locally with `docker build -t app .` and `docker run --rm -p 8000:8000 app` when Docker is installed.
 
 The `test/samples/` folder has a HelloWorld app for node, python-uv, flask, streamlit and fastapi. Use them to check the templates before a real project.
@@ -107,7 +109,7 @@ Only for `build_location: github`. For local builds, skip this step and give the
 
 Walk the user through this, one step at a time. Wait for confirmation before the next step.
 
-1. **Push the generated files.** The user commits and pushes `.github/workflows/release.yml`, `packaging/` and `scripts/`.
+1. **Push the generated files.** The user commits and pushes `.github/workflows/release.yml`, `distribution.json`, `distribution.md`, `packaging/`, `scripts/`, the agent pointers, and, when they were written, `Dockerfile`, `.dockerignore` and `.env.example` (never `.env`).
 2. **Create the releases repository** (if Q6 chose one). It must be public. Name it `<repo>-releases`.
 3. **Create a token for publishing.** A fine-grained personal access token with Contents read and write on the releases repo only. Copy it into the codebase repo as the Actions secret `RELEASES_REPO_TOKEN`: Settings, Secrets and variables, Actions, New repository secret. The token value must never be committed to the repo or pasted into chat.
 3b. **Set the releases repo name (optional).** Settings, Secrets and variables, Actions, Variables, New repository variable: name `RELEASES_REPO`, value `<owner>/<releases-repo>`. Without it the workflow uses `<repo>-releases`.
