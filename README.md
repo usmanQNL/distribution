@@ -1,6 +1,6 @@
 # distribution skill
 
-A shareable Claude skill that sets up release builds for a Python, Node or mixed codebase. Every merge to main builds artifacts (and, if chosen, a Docker image) (on GitHub, or locally with `scripts/release_local.sh`), writes SHA256 checksums, signs them with cosign (Sigstore) or Ed25519, chosen in setup, and publishes a GitHub release to a separate public releases repository.
+A shareable Claude skill that sets up release builds for a Python, Node or mixed codebase. Every merge to main builds the chosen artifacts, and a Docker image if chosen, on GitHub Actions (or on your own machine with `scripts/release_local.sh`). It writes SHA256 checksums, signs them with cosign (Sigstore) or Ed25519, chosen in setup, and publishes a GitHub release to a separate public releases repository. The Docker image goes to GitHub Container Registry.
 
 ## What it produces
 
@@ -61,12 +61,17 @@ Keep `root-private.pem` outside the repo. `.gitignore` already ignores `*-privat
 
 - `SKILL.md`: the instructions Claude follows
 - `distribution.md`: the agent-neutral guide (copied into each project)
-- `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to the guide
+- `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`: pointers to the guide, plus the rules for working on this repo (copied into projects from `templates/agent-pointers/`, without this repo's rules)
+- `distribution.json`, `VERSION`: this repo's own release answers and major version (it releases the Flask sample as `distribution-<version>-<platform>`)
+- `Dockerfile`, `.dockerignore`, `.env.example`, `packaging/`: this repo's own release files for the Flask sample
+- `.github/workflows/release.yml` (a copy of `templates/release.yml`) and `.github/workflows/ci.yml` (the `dco` and `test` jobs)
 - `templates/release.yml`: the GitHub Actions workflow
+- `templates/distribution.json`: the answers file `generate.sh` copies, with `app_name` set to the project folder name
+- `templates/distribution.md`, `templates/agent-pointers/`: the guide and the `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` pointers copied into projects
 - `templates/Dockerfile.python`, `templates/Dockerfile.node`, `templates/dockerignore`: Docker files, copied only when the user picks Docker
 - `templates/app.spec`, `templates/installer.iss`: PyInstaller spec (with placeholders for entry point and frontend) and Inno Setup script, both named from `app_name`
 - `scripts/detect.sh`, `scripts/generate.sh`: detect the project and copy the templates
-- `scripts/checksums.sh`, `scripts/sign.sh`: SHA256SUMS and cosign signing
+- `scripts/checksums.sh`, `scripts/sign.sh`: SHA256SUMS, and signing with cosign or Ed25519 (`sign.sh - check-key` checks `RELEASE_SIGNING_KEY` before a build)
 - `scripts/env_example.sh`, `templates/env_hook.py`: the `.env.example` that releases ship, and the PyInstaller hook that loads `.env` from next to the program
 - `scripts/make_sh.sh`, `scripts/make_deb.sh`, `scripts/install-linux.sh`: Linux installer, package and install helper
 - `scripts/uv-deploy.sh`: uv-based run script for targets without PyInstaller
@@ -82,7 +87,7 @@ Keep `root-private.pem` outside the repo. `.gitignore` already ignores `*-privat
 
 ## Status
 
-`scripts/test_skill.sh` runs in CI on every pull request, with shellcheck and actionlint. This repo also runs its own release workflow on the Flask sample: every pull request builds the Windows exe and installer, the Linux .sh and .deb, the uv bundle, the Docker image and the settings template (the sample reads `GREETING` from `.env`), and every merge to main publishes them, signed with cosign, to `usmanQNL/distribution-test` (the image goes to `ghcr.io/usmanqnl/distribution`). CI also builds the Dockerfile templates against the sample apps.
+`scripts/test_skill.sh` runs in CI on every pull request, with shellcheck and actionlint, and the `dco` job fails a pull request that has a commit without a `Signed-off-by` line. This repo also runs its own release workflow on the Flask sample: every pull request builds the Windows exe and installer, the Linux .sh and .deb, the uv bundle, the Docker image and the settings template (the sample reads `GREETING` from `.env`), and every merge to main publishes them, signed with cosign, to `usmanQNL/distribution-test` (the image goes to `ghcr.io/usmanqnl/distribution`). CI also builds the Dockerfile templates against the sample apps.
 
 ## License
 
